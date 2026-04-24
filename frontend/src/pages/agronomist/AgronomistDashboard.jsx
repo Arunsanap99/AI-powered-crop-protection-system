@@ -56,8 +56,8 @@ const AgronomistDashboard = () => {
 
   return (
     <div className={`min-h-screen ${isDark
-        ? 'bg-gradient-to-br from-[#0a0f1e] via-[#071519] to-[#0a0f1e]'
-        : 'bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50'
+      ? 'bg-gradient-to-br from-[#0a0f1e] via-[#071519] to-[#0a0f1e]'
+      : 'bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50'
       }`}>
       <style>{`
         @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }

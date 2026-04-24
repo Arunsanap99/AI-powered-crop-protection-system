@@ -282,7 +282,7 @@ const FarmerDashboard = () => {
                 {/* AI Engine badge */}
                 <div className="inline-flex items-center gap-2 ai-badge text-white text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-4 shadow-lg">
                   <span className="w-2 h-2 bg-yellow-400 rounded-full pulse-dot" />
-                  AI Farm Intelligence Engine Active
+                  {t('AI Farm Intelligence Engine Active')}
                 </div>
 
                 <p className="text-emerald-300 text-sm font-semibold mb-1 flex items-center gap-2">
@@ -304,7 +304,7 @@ const FarmerDashboard = () => {
                     </span>
                   )}
                   <span className="inline-flex items-center gap-2 bg-emerald-400/20 text-emerald-200 px-3 py-1.5 rounded-xl text-xs font-semibold border border-emerald-400/30">
-                    <Zap size={14} className="text-yellow-400" /> AI Confidence: {profitConf}%
+                    <Zap size={14} className="text-yellow-400" /> {t('AI Confidence')}: {profitConf}%
                   </span>
                 </div>
 
@@ -316,7 +316,7 @@ const FarmerDashboard = () => {
               {/* RIGHT — AI risk indicators */}
               <div className="flex-shrink-0">
                 <p className="text-emerald-300/70 text-xs font-semibold uppercase tracking-widest mb-4 text-center">
-                  AI Risk Analysis
+                  {t('AI Risk Analysis')}
                 </p>
                 <div className="grid grid-cols-4 gap-3 sm:gap-5">
                   <RiskRing value={weatherRisk} label={t('Weather Risk')} color="#60a5fa" active={heroVisible} />
@@ -371,7 +371,7 @@ const FarmerDashboard = () => {
                 onClick={() => setShowMap(v => !v)}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all bg-[var(--bg-input)] text-[var(--text-secondary)] border-[var(--border-card)] hover:bg-[var(--bg-card-hover)]`}
               >
-                {showMap ? '▲ Collapse' : '▼ Expand'}
+                {showMap ? t('Collapse') : t('Expand')}
               </button>
             </div>
           </div>
@@ -398,12 +398,12 @@ const FarmerDashboard = () => {
                       <Popup>
                         <div className="p-3 min-w-[160px]">
                           <p className="font-extrabold text-gray-900 text-sm mb-1 flex items-center gap-1.5">
-                            <Sprout size={14} className="text-emerald-700" /> Your Farm
+                            <Sprout size={14} className="text-emerald-700" /> {t('Your Farm')}
                           </p>
                           <p className="text-xs text-gray-500 font-medium">{user?.address?.district || 'Your location'}</p>
                           <div className="flex items-center gap-1.5 mt-2">
                             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                            <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Active Monitor</p>
+                            <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">{t('Active Monitor')}</p>
                           </div>
                         </div>
                       </Popup>
@@ -423,14 +423,14 @@ const FarmerDashboard = () => {
                           <p className="font-extrabold text-gray-900 text-sm mb-0.5 flex items-center gap-1.5">
                             <UserIcon size={14} className="text-blue-600" /> {ag.fullName}
                           </p>
-                          <p className="text-xs text-blue-600 font-semibold mb-2">Verified Agronomist</p>
+                          <p className="text-xs text-blue-600 font-semibold mb-2">{t('Verified Agronomist')}</p>
                           {ag.mobileNumber && (
                             <div className="flex gap-2">
-                              <a href={`tel:${agro.mobileNumber}`} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 text-white text-[10px] font-bold py-1.5 rounded-lg">
-                                <Zap size={10} /> Call
+                              <a href={`tel:${ag.mobileNumber}`} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 text-white text-[10px] font-bold py-1.5 rounded-lg">
+                                <Zap size={10} /> {t('Call')}
                               </a>
                               <a href={`https://wa.me/91${ag.mobileNumber}`} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-1 bg-[#25D366] text-white text-[10px] font-bold py-1.5 rounded-lg">
-                                WhatsApp
+                                {t('WhatsApp')}
                               </a>
                             </div>
                           )}
@@ -451,7 +451,7 @@ const FarmerDashboard = () => {
                         <p className="text-xs text-amber-600 font-semibold mb-2 flex items-center gap-1">
                           <MapPin size={12} /> ~{m.distance}
                         </p>
-                        <Link to="/farmer/market" className="block text-center bg-amber-600 text-white text-xs font-bold py-1.5 rounded-lg">View Prices</Link>
+                        <Link to="/farmer/market" className="block text-center bg-amber-600 text-white text-xs font-bold py-1.5 rounded-lg">{t('View Prices')}</Link>
                       </div>
                     </Popup>
                   </Marker>
@@ -524,14 +524,14 @@ const FarmerDashboard = () => {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
-                  🤖 AI Recommended Tip for Today
+                  {t('AI Recommended Tip for Today')}
                 </span>
                 <span className={`text-[10px] font-semibold ${isDark ? 'text-amber-400' : 'text-amber-500'} ml-auto`}>
-                  {FARMING_TIPS[tipIndex].label}
+                  {t(FARMING_TIPS[tipIndex].label)}
                 </span>
               </div>
               <p className={`text-sm leading-relaxed tip-box ${isDark ? 'text-amber-200' : 'text-amber-900'}`} style={{ opacity: tipFading ? 0 : 1 }}>
-                {FARMING_TIPS[tipIndex].tip}
+                {t(FARMING_TIPS[tipIndex].tip)}
               </p>
               {/* Dot indicators */}
               <div className="flex items-center gap-1.5 mt-3">
@@ -542,7 +542,7 @@ const FarmerDashboard = () => {
                     className={`w-1.5 h-1.5 rounded-full transition-all ${i === tipIndex ? 'bg-amber-500 w-4' : isDark ? 'bg-amber-700' : 'bg-amber-300'}`}
                   />
                 ))}
-                <span className={`text-[10px] ml-auto ${textS}`}>AI Confidence: {profitConf}%</span>
+                <span className={`text-[10px] ml-auto ${textS}`}>{t('AI Confidence')}: {profitConf}%</span>
               </div>
             </div>
           </div>
@@ -562,7 +562,7 @@ const FarmerDashboard = () => {
               </div>
             </div>
             <Link to="/farmer/crops" className="hidden sm:inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all">
-              View All <ChevronRight size={14} />
+              {t('View All')} <ChevronRight size={14} />
             </Link>
           </div>
 
@@ -595,7 +595,7 @@ const FarmerDashboard = () => {
                 <p className={`font-extrabold text-lg mb-1 ${textH}`}>{t('No agronomists available in your district.')}</p>
                 <p className={`text-sm mb-6 ${textS}`}>{t('Check back later or contact support.')}</p>
                 <button className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:-translate-y-0.5 transition-all">
-                  <Zap size={18} /> Request Expert Callback
+                  <Zap size={18} /> {t('Request Expert Callback')}
                 </button>
               </div>
             ) : (
@@ -627,7 +627,7 @@ const FarmerDashboard = () => {
 
                     <div className="flex items-center gap-1.5 mb-3">
                       <span className="w-2 h-2 bg-emerald-400 rounded-full pulse-dot" />
-                      <span className="text-xs text-emerald-600 font-semibold">Available Now</span>
+                      <span className="text-xs text-emerald-600 font-semibold">{t('Available Now')}</span>
                     </div>
 
                     {/* Actions */}
@@ -635,11 +635,11 @@ const FarmerDashboard = () => {
                       <div className="flex gap-2">
                         <a href={`tel:${agro.mobileNumber}`}
                           className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-xl transition-colors shadow-sm">
-                          <Zap size={12} /> Call
+                          <Zap size={12} /> {t('Call')}
                         </a>
                         <a href={`https://wa.me/91${agro.mobileNumber}`} target="_blank" rel="noreferrer"
                           className="flex-1 flex items-center justify-center gap-1.5 bg-[#25D366] hover:bg-[#22c55e] text-white text-xs font-bold py-2 rounded-xl transition-colors shadow-sm">
-                          WhatsApp
+                          {t('WhatsApp')}
                         </a>
                       </div>
                     )}
@@ -656,7 +656,7 @@ const FarmerDashboard = () => {
       <div className="fixed bottom-6 right-6 z-50 group">
         <div className="absolute -top-10 right-0 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
           <div className="bg-gray-900 text-white text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap border border-white/10">
-            Ask Krishi Kavach AI <Sparkles size={12} className="text-yellow-400" />
+            {t('Ask Krishi Kavach AI')} <Sparkles size={12} className="text-yellow-400" />
           </div>
         </div>
         <Link to="/farmer/ai-assistant" className="relative flex items-center justify-center w-14 h-14 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-2xl shadow-2xl hover:shadow-indigo-500/50 hover:scale-110 transition-all duration-300 border border-white/20">

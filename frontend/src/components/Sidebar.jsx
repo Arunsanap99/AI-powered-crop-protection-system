@@ -89,7 +89,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center border transition-all bg-[var(--bg-card)] border-[var(--border-accent)]">
                                         <Sprout className="text-emerald-500 w-6 h-6" />
                                     </div>
-                                    <span className="font-extrabold text-xl tracking-tight text-[var(--text-primary)]">Krishi Kavach</span>
+                                    <span className="font-extrabold text-xl tracking-tight text-[var(--text-primary)]">{t('Krishi Kavach')}</span>
                                 </div>
                                 <button
                                     onClick={onClose}
@@ -135,7 +135,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                             </div>
                                             <div className="overflow-hidden">
                                                 <p className="text-sm font-black truncate text-[var(--text-primary)]">{user.fullName}</p>
-                                                <p className="text-xs font-medium capitalize truncate text-[var(--text-secondary)]">{user.role}</p>
+                                                <p className="text-xs font-medium capitalize truncate text-[var(--text-secondary)]">{t(user.role)}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -145,14 +145,14 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     <>
                                         <div className="mt-4 p-4 rounded-[2rem] bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-xl shadow-emerald-500/20 group relative overflow-hidden">
                                             <div className="relative z-10">
-                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200 mb-1">New Opportunity</p>
-                                                <h4 className="text-sm font-bold leading-tight mb-3">Govt Agriculture Schemes</h4>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200 mb-1">{t('New Opportunity')}</p>
+                                                <h4 className="text-sm font-bold leading-tight mb-3">{t('Govt Agriculture Schemes')}</h4>
                                                 <Link
                                                     to="/farmer/schemes"
                                                     onClick={onClose}
                                                     className="inline-flex items-center gap-2 px-4 py-2 bg-white text-emerald-700 text-[10px] font-black rounded-xl hover:bg-emerald-50 transition-colors shadow-lg"
                                                 >
-                                                    View Matches <ChevronRight size={14} />
+                                                    {t('View Matches')} <ChevronRight size={14} />
                                                 </Link>
                                             </div>
                                             <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
@@ -173,7 +173,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl transition-all font-bold active:scale-95 text-red-600 hover:bg-red-500/10"
                                 >
                                     <LogOut size={22} />
-                                    <span>Logout</span>
+                                    <span>{t('Logout')}</span>
                                 </button>
                             </div>
                         </div>
@@ -216,7 +216,7 @@ const RecommendedSchemeSidebar = ({ onClose }) => {
             className="mt-3 p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-card)] border-l-4 border-l-amber-500 overflow-hidden relative"
         >
             <div className="flex items-center justify-between mb-2">
-                <span className="text-[9px] font-black text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded uppercase tracking-widest border border-amber-200/50">MATCHED SCHEME</span>
+                <span className="text-[9px] font-black text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded uppercase tracking-widest border border-amber-200/50">{t('MATCHED SCHEME')}</span>
                 <span className="text-[9px] font-bold text-[var(--text-muted)]">{scheme.lastDate}</span>
             </div>
             <h5 className="text-xs font-black text-[var(--text-primary)] mb-1 leading-tight line-clamp-1">{scheme.title}</h5>

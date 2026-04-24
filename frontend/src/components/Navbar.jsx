@@ -45,24 +45,24 @@ const Navbar = () => {
   // Helper to get Page Title from Path
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === '/') return 'Home';
-    if (path.includes('/farmer/crops')) return 'My Crops';
-    if (path.includes('/farmer/disease-reports')) return 'Disease Reports';
-    if (path.includes('/farmer/weather')) return 'Weather Updates';
-    if (path.includes('/farmer/market')) return 'Market Trends';
-    if (path.includes('/farmer/profile')) return 'My Profile';
-    if (path.includes('/farmer')) return 'Dashboard';
+    if (path === '/') return t('Home');
+    if (path.includes('/farmer/crops')) return t('My Crops');
+    if (path.includes('/farmer/disease-reports')) return t('Disease Reports');
+    if (path.includes('/farmer/weather')) return t('Weather Updates');
+    if (path.includes('/farmer/market')) return t('Market Trends');
+    if (path.includes('/farmer/profile')) return t('My Profile');
+    if (path.includes('/farmer')) return t('Dashboard');
 
-    if (path.includes('/admin/farmers')) return 'Farmers Management';
-    if (path.includes('/admin/agronomists')) return 'Agronomist Verification';
-    if (path.includes('/admin/profile')) return 'Admin Profile';
-    if (path.includes('/admin')) return 'Admin Panel';
+    if (path.includes('/admin/farmers')) return t('Farmers Management');
+    if (path.includes('/admin/agronomists')) return t('Agronomist Verification');
+    if (path.includes('/admin/profile')) return t('Admin Profile');
+    if (path.includes('/admin')) return t('Admin Panel');
 
-    if (path.includes('/agronomist/profile')) return 'Expert Profile';
-    if (path.includes('/agronomist')) return 'Expert Panel';
+    if (path.includes('/agronomist/profile')) return t('Expert Profile');
+    if (path.includes('/agronomist')) return t('Expert Panel');
 
-    if (path === '/login') return 'Welcome Back';
-    if (path === '/register') return 'Join Krishi Kavach';
+    if (path === '/login') return t('Welcome Back');
+    if (path === '/register') return t('Join Krishi Kavach');
 
     return 'Krishi Kavach';
   };
@@ -114,7 +114,7 @@ const Navbar = () => {
               <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white shadow-lg">
                 <ShieldCheck size={20} />
               </div>
-              <span className="font-black text-lg tracking-tighter text-primary">KRISHI KAVACH</span>
+              <span className="font-black text-lg tracking-tighter text-primary">{t('KRISHI KAVACH')}</span>
             </Link>
 
             {/* Right side: theme toggle + chat + profile */}
@@ -186,7 +186,7 @@ const Navbar = () => {
                             <div className="flex items-center gap-3 mb-1">
                               <p className="text-sm font-black text-primary truncate max-w-[150px]">{user.fullName}</p>
                               <span className={`text-[10px] px-2 py-0.5 rounded-full ${rc.bg} text-white font-bold tracking-widest uppercase`}>
-                                {rc.label}
+                                {t(rc.label)}
                               </span>
                             </div>
                             {/* As requested: Do not show email */}
@@ -202,7 +202,7 @@ const Navbar = () => {
                               className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-card-hover text-secondary hover:text-primary transition-all text-sm font-semibold group"
                             >
                               <User size={18} className="group-hover:text-indigo-400" />
-                              <span>My Profile</span>
+                              <span>{t('My Profile')}</span>
                               <ChevronRight size={14} className="ml-auto opacity-30" />
                             </Link>
 
@@ -211,7 +211,7 @@ const Navbar = () => {
                               className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-red-500/10 text-red-400 transition-all text-sm font-semibold group mt-1"
                             >
                               <LogOut size={18} className="group-hover:scale-110 transition-transform" />
-                              <span>Sign Out</span>
+                              <span>{t('Sign Out')}</span>
                             </button>
                           </div>
                         </motion.div>
@@ -222,7 +222,7 @@ const Navbar = () => {
               ) : (
                 <Link to="/login" className="kk-btn-primary py-2 px-6 flex items-center gap-2">
                   <User size={16} />
-                  <span>Login</span>
+                  <span>{t('Login')}</span>
                 </Link>
               )}
             </div>
