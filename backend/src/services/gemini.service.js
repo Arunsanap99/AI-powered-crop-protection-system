@@ -11,6 +11,43 @@ const LANGUAGE_NAMES = {
   hinglish: "Hinglish (Hindi written in English script with a mix of English words)",
 };
 
+// ── CACHE CONFIGURATION ──────────────────────────────────────────────────────
+const aiCache = new Map();
+export const CACHE_TTL = {
+  market: 4 * 60 * 60 * 1000,    // 4 hours
+  weather: 1 * 60 * 60 * 1000,   // 1 hour
+  seeds: 24 * 60 * 60 * 1000,    // 24 hours
+  chat: 0,                       // No cache for chat
+  disease: 24 * 60 * 60 * 1000,  // 24 hours
+  schemes: 24 * 60 * 60 * 1000,  // 24 hours
+};
+
+export const getFromCache = (key) => {
+  const item = aiCache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiry) {
+    aiCache.delete(key);
+    return null;
+  }
+  return item.data;
+};
+
+export const setToCache = (key, data, ttl) => {
+  if (!ttl || ttl <= 0) return;
+  aiCache.set(key, {
+    data,
+    expiry: Date.now() + ttl
+  });
+};
+
+// Periodic cache cleanup
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of aiCache.entries()) {
+    if (now > value.expiry) aiCache.delete(key);
+  }
+}, 30 * 60 * 1000); // Every 30 mins
+
 const createClient = (userApiKey = null) => {
   const apiKey = userApiKey || process.env.GROK_API_KEY;
   if (!apiKey) throw new Error("No Groq API key found. Please configure it in your profile.");
@@ -59,9 +96,47 @@ const normalizeAndParseJSON = (raw) => {
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start !== -1 && end !== -1 && end > start) {
-      return JSON.parse(text.slice(start, end + 1));
+      try {
+        let snippet = text.slice(start, end + 1);
+        // Attempt to fix common JSON errors like trailing commas or commas in numbers
+        snippet = snippet.replace(/:\s*"(\d+),(\d+)"/g, ': $1$2'); // "4,500" -> 4500
+        return JSON.parse(snippet);
+      } catch (innerErr) {
+        throw new Error(`Unable to parse JSON from LLM response (fallback failed): ${text.slice(0, 200)}`);
+      }
     }
     throw new Error(`Unable to parse JSON from LLM response: ${text.slice(0, 200)}`);
+  }
+};
+
+/**
+ * Helper to call Groq AI with a fallback model if the primary model fails (e.g. Rate Limit 429).
+ */
+const callAIWithFallback = async (client, messages, temperature = 0.3, max_tokens = 2000) => {
+  const PRIMARY_MODEL = "llama-3.3-70b-versatile";
+  const FALLBACK_MODEL = "llama-3.1-8b-instant";
+
+  try {
+    const response = await client.chat.completions.create({
+      model: PRIMARY_MODEL,
+      messages,
+      temperature,
+      max_tokens,
+    });
+    return response.choices[0].message.content;
+  } catch (err) {
+    // Check if it's a rate limit error (429) or other API error
+    if (err.status === 429 || err.message?.includes("rate limit") || err.message?.includes("TPD")) {
+      console.warn(`[AI Fallback] Primary model (${PRIMARY_MODEL}) rate limited. Falling back to ${FALLBACK_MODEL}...`);
+      const response = await client.chat.completions.create({
+        model: FALLBACK_MODEL,
+        messages,
+        temperature,
+        max_tokens,
+      });
+      return response.choices[0].message.content;
+    }
+    throw err;
   }
 };
 
@@ -175,90 +250,50 @@ The app supports three languages: English, Hindi (हिंदी), and Marathi 
 //  1. STRUCTURED DISEASE / CARE INFO
 // ─────────────────────────────────────────────────────────────────────────────
 export const getCropDiseaseInfo = async (cropName, diseaseName, language = "en", userApiKey = null) => {
+  const cacheKey = `disease_${cropName}_${diseaseName}_${language}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const client = createClient(userApiKey);
   const langName = LANGUAGE_NAMES[language] || "English";
   const isHealthy = diseaseName?.toLowerCase().includes("healthy");
 
   const prompt = isHealthy
-    ? `You are an expert agricultural advisor for Indian farmers.
-The AI model detected that the ${cropName} plant appears HEALTHY.
-Provide comprehensive care tips for the farmer in ${langName}.
-Return ONLY a valid JSON object (no markdown, no code fences):
+    ? `Agricultural expert advisor. ${cropName} plant is HEALTHY. Provide care tips in ${langName}. 
+Return JSON ONLY:
 {
-  "title": "short heading in ${langName}",
-  "summary": "2-3 sentence overview explaining why the plant is healthy and what keeps it that way, in ${langName}",
+  "title": "Healthy ${cropName}",
+  "summary": "Overview in ${langName}",
   "symptoms": [],
   "causes": [],
   "whyCausesDisease": [],
-  "treatment": ["detailed care tip 1", "detailed care tip 2", "detailed care tip 3", "care tip 4"],
-  "prevention": ["preventive measure 1", "preventive measure 2", "preventive measure 3", "preventive measure 4"],
+  "treatment": ["tip 1", "tip 2"],
+  "prevention": ["prev 1", "prev 2"],
   "severity": "None",
-  "naturalRemedies": ["natural care tip 1", "natural care tip 2", "natural care tip 3"],
-  "yieldImpact": "Brief note on why current health will maximize yield in ${langName}",
-  "yieldRecoveryTips": ["tip to further boost yield 1 in ${langName}"]
-}
-All text values must be in ${langName}. Provide 3-5 items per array.`
-
-    : `You are a senior agricultural plant pathologist and advisor for Indian farmers.
-A crop disease AI model detected "${diseaseName}" in a "${cropName}" plant.
-Provide comprehensive, practical, farmer-friendly information in ${langName}.
-Return ONLY a valid JSON object (no markdown, no code fences):
+  "naturalRemedies": ["remedy 1"],
+  "yieldImpact": "Note in ${langName}",
+  "yieldRecoveryTips": ["tip 1"]
+}`
+    : `Agri plant pathologist. ${diseaseName} in ${cropName}. Provide diagnosis and treatment in ${langName}.
+Return JSON ONLY:
 {
-  "title": "Disease name in ${langName}",
-  "summary": "2-3 sentence overview of this disease, its impact and urgency in ${langName}",
-  "symptoms": [
-    "Detailed visible symptom 1 (colour, texture, where on plant) in ${langName}",
-    "Detailed visible symptom 2 in ${langName}",
-    "Detailed visible symptom 3 in ${langName}",
-    "Detailed visible symptom 4 in ${langName}"
-  ],
-  "causes": [
-    "Root cause 1 (pathogen name if applicable) in ${langName}",
-    "Root cause 2 (environmental / host factor) in ${langName}",
-    "Root cause 3 in ${langName}"
-  ],
-  "whyCausesDisease": [
-    "Explain in simple language HOW cause 1 leads to the disease symptoms — why does it harm the plant? in ${langName}",
-    "Explain WHY high humidity / certain weather conditions trigger this disease in ${langName}",
-    "Explain WHY the pathogen spreads easily from plant to plant in ${langName}"
-  ],
-  "treatment": [
-    "Step-by-step treatment 1 with specific product names if applicable in ${langName}",
-    "Step-by-step treatment 2 in ${langName}",
-    "Step-by-step treatment 3 in ${langName}",
-    "Step-by-step treatment 4 in ${langName}"
-  ],
-  "prevention": [
-    "Preventive measure 1 with exact timing/frequency in ${langName}",
-    "Preventive measure 2 in ${langName}",
-    "Preventive measure 3 in ${langName}",
-    "Preventive measure 4 in ${langName}"
-  ],
-  "severity": "Medium",
-  "naturalRemedies": [
-    "Natural/organic remedy 1 with preparation instructions in ${langName}",
-    "Natural/organic remedy 2 in ${langName}",
-    "Natural/organic remedy 3 in ${langName}"
-  ],
-  "yieldImpact": "Specific percentage or description of crop loss if untreated in ${langName}",
-  "yieldRecoveryTips": [
-    "Tip to recover lost yield 1 (e.g. micronutrient spray) in ${langName}",
-    "Tip 2 in ${langName}",
-    "Tip 3 in ${langName}"
-  ]
-}
-For severity choose exactly one of: "Low", "Medium", or "High".
-All text values must be in ${langName}. Provide 3-5 items per array.
-Be specific, practical and use simple farmer-friendly language.
-CRITICAL: Use only ASCII digits (0-9) inside the JSON. Never use Devanagari (१२३) or regional numerals.`;
+  "title": "Disease Name in ${langName}",
+  "summary": "Overview in ${langName}",
+  "symptoms": ["symp 1", "symp 2"],
+  "causes": ["cause 1"],
+  "whyCausesDisease": ["reason 1"],
+  "treatment": ["treat 1", "treat 2"],
+  "prevention": ["prev 1"],
+  "severity": "Low/Medium/High",
+  "naturalRemedies": ["rem 1"],
+  "yieldImpact": "Impact in ${langName}",
+  "yieldRecoveryTips": ["tip 1"]
+}`;
 
-  const response = await client.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.3,
-  });
-
-  return normalizeAndParseJSON(response.choices[0].message.content);
+  const content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.3, 1500);
+  const result = normalizeAndParseJSON(content);
+  setToCache(cacheKey, result, CACHE_TTL.disease);
+  return result;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -299,29 +334,12 @@ ${pageContext ? `The user is currently on: ${pageContext}` : "The user is naviga
 8. **Honest**: If you don't know something specific, say so and suggest consulting a local agronomist.
 9. **Warm tone**: Be encouraging and respectful. Farmers work hard — be their supportive advisor.`;
 
-    const response = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages,
-      ],
-      temperature: 0.4,
-      max_tokens: 1200,
-    }).catch(async (err) => {
-      console.error("[!] AI Chat Error (Primary Model):", err.message);
-      // Fallback to a smaller/faster model if 70B fails
-      return client.chat.completions.create({
-        model: "llama-3.1-8b-instant",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
-        temperature: 0.4,
-        max_tokens: 1000,
-      });
-    });
+    const content = await callAIWithFallback(client, [
+      { role: "system", content: systemPrompt },
+      ...messages,
+    ], 0.4, 1200);
 
-    return response.choices[0].message.content.trim();
+    return content.trim();
   } catch (error) {
     console.error("[!!] Fatal AI Service Error:", error.message);
     throw error;
@@ -394,14 +412,8 @@ All text values must be in ${langName}. Be specific with quantities scaled to ${
 CRITICAL: Use only ASCII digits (0-9) in all JSON numeric values and quantity strings. Never use Devanagari (१२३) or any other regional numeral script inside the JSON.`;
 
 
-  const response = await client.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.3,
-    max_tokens: 2000,
-  });
-
-  return normalizeAndParseJSON(response.choices[0].message.content);
+  const content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.3, 2000);
+  return normalizeAndParseJSON(content);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -415,96 +427,33 @@ CRITICAL: Use only ASCII digits (0-9) in all JSON numeric values and quantity st
  * @returns {object}               - Structured impact analysis
  */
 export const getWeatherCropImpact = async (cropName, currentWeather, dailyForecast, language = "en", userApiKey = null) => {
+  const cacheKey = `weather_${cropName}_${currentWeather.temperature}_${language}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const client = createClient(userApiKey);
   const langName = LANGUAGE_NAMES[language] || "English";
 
-  const weatherSummary = `Current conditions: Temp=${currentWeather.temperature}°C, Feels=${currentWeather.feelsLike}°C, Humidity=${currentWeather.humidity}%, Wind=${currentWeather.windSpeed}km/h, Rain=${currentWeather.precipitation}mm today.`;
-  const forecastSummary = dailyForecast
-    .slice(0, 7)
-    .map((d, i) => `Day${i + 1}(${d.date}): Max=${d.maxTemp}°C Min=${d.minTemp}°C Rain=${d.precipitation}mm Prob=${d.precipitationProbability}%`)
-    .join(" | ");
+  const weatherSummary = `Current: ${currentWeather.temperature}°C, ${currentWeather.humidity}%, ${currentWeather.precipitation}mm.`;
+  const forecastSummary = dailyForecast.slice(0, 7).map(d => `${d.date}: ${d.maxTemp}/${d.minTemp}°C`).join("|");
 
-  const prompt = `You are a senior agricultural meteorologist and crop advisor for Indian farmers.
-Analyze the following weather data and explain how it will specifically impact "${cropName}" cultivation.
-Respond ONLY in ${langName}.
-
-Weather Data:
-${weatherSummary}
-7-Day Forecast: ${forecastSummary}
-
-Return ONLY a valid JSON object (no markdown, no code fences):
+  const prompt = `Agri-Met expert. Analyze ${cropName} impact for weather: ${weatherSummary}. Forecast: ${forecastSummary}. 
+Return JSON ONLY in ${langName}:
 {
-  "overallStatus": "one of: Excellent / Good / Moderate / Caution / Critical",
-  "overallMessage": "1-2 sentence overall weather impact summary for ${cropName} in ${langName}",
-  "overallScore": 75,
-  "impacts": [
-    {
-      "factor": "Temperature",
-      "icon": "🌡️",
-      "currentValue": "${currentWeather.temperature}°C",
-      "status": "one of: optimal / warning / danger / good",
-      "impact": "How this temperature specifically affects ${cropName} growth, flowering, or yield in ${langName}",
-      "recommendation": "Specific action farmer should take in ${langName}"
-    },
-    {
-      "factor": "Humidity",
-      "icon": "💧",
-      "currentValue": "${currentWeather.humidity}%",
-      "status": "one of: optimal / warning / danger / good",
-      "impact": "How this humidity specifically affects ${cropName} — disease risk, fungal threats, etc. in ${langName}",
-      "recommendation": "Specific action for humidity management in ${langName}"
-    },
-    {
-      "factor": "Wind Speed",
-      "icon": "💨",
-      "currentValue": "${currentWeather.windSpeed} km/h",
-      "status": "one of: optimal / warning / danger / good",
-      "impact": "How this wind speed affects ${cropName} — lodging risk, pollination, spray drift, etc. in ${langName}",
-      "recommendation": "Specific wind-related advice for ${cropName} in ${langName}"
-    },
-    {
-      "factor": "Rainfall",
-      "icon": "🌧️",
-      "currentValue": "${currentWeather.precipitation} mm",
-      "status": "one of: optimal / warning / danger / good",
-      "impact": "How current and upcoming rainfall specifically affects ${cropName} water requirements, root health, and disease in ${langName}",
-      "recommendation": "Irrigation or drainage advice for ${cropName} in ${langName}"
-    }
-  ],
-  "weeklyAdvisory": [
-    {
-      "day": "Day label (e.g. Today, Tomorrow, Mon)",
-      "alert": "Critical action or observation needed for ${cropName} on this specific day based on forecast in ${langName}",
-      "alertLevel": "one of: info / warning / danger"
-    }
-  ],
-  "keyRisks": [
-    "Specific risk 1 for ${cropName} based on this week's weather in ${langName}",
-    "Specific risk 2 in ${langName}",
-    "Specific risk 3 in ${langName}"
-  ],
-  "immediateActions": [
-    "Most urgent action to take today for ${cropName} in ${langName}",
-    "Second action in ${langName}",
-    "Third action in ${langName}"
-  ],
-  "bestTimeForActivities": {
-    "spraying": "Best days this week for spraying pesticides/fertilizers based on forecast in ${langName}",
-    "irrigation": "Irrigation schedule based on rainfall forecast in ${langName}",
-    "harvesting": "If crop is near harvest, best days based on weather in ${langName}, or note it's not harvest season"
-  }
-}
-For overallScore: 0-100 (100 = perfect weather for this crop). All text in ${langName}. Provide 7 entries in weeklyAdvisory (one per forecast day). Be specific — not generic farming advice, but advice tailored to ${cropName} and the exact weather data provided.
-CRITICAL: Use only ASCII digits (0-9) inside the JSON. Never use Devanagari (१२३) or regional numerals.`;
+  "overallStatus": "Good/Caution/Critical",
+  "overallMessage": "Summary in ${langName}",
+  "overallScore": 80,
+  "impacts": [{ "factor": "Temp", "status": "good", "impact": "desc", "recommendation": "act" }],
+  "weeklyAdvisory": [{ "day": "Today", "alert": "msg", "alertLevel": "info" }],
+  "keyRisks": ["risk 1"],
+  "immediateActions": ["act 1"],
+  "bestTimeForActivities": { "spraying": "time", "irrigation": "time", "harvesting": "time" }
+}`;
 
-  const response = await client.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.3,
-    max_tokens: 2500,
-  });
-
-  return normalizeAndParseJSON(response.choices[0].message.content);
+  const content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.3, 2000);
+  const result = normalizeAndParseJSON(content);
+  setToCache(cacheKey, result, CACHE_TTL.weather);
+  return result;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -516,109 +465,59 @@ CRITICAL: Use only ASCII digits (0-9) inside the JSON. Never use Devanagari (१
  * @param {string} state       - User's state
  * @returns {object}           - { localMarkets, majorMarkets, priceHistory, summary }
  */
-export const getMarketPrices = async (commodity, district = "Nashik", state = "Maharashtra", userApiKey = null) => {
+export const getMarketPrices = async (commodity, district = "Nashik", state = "Maharashtra", userApiKey = null, realDataContext = "") => {
+  const cacheKey = `market_${commodity}_${district}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const client = createClient(userApiKey);
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
-  const prompt = `You are an expert Indian agricultural market analyst with deep knowledge of mandi prices across India.
-Today's date: ${todayStr}
+  const prompt = `Indian Agri-Market Analyst. Today: ${todayStr}. 
+Task: Provide current mandi prices for ${commodity} in ${district}, ${state}. 
 
-Provide realistic, accurate commodity price intelligence for "${commodity}" based on current Indian market conditions.
-District: ${district}, State: ${state}
+REAL MARKET DATA CONTEXT (Use this as your primary truth):
+${realDataContext}
 
-Return ONLY a valid JSON object (no markdown, no code fences) with this exact structure:
+Mandatory:
+1. List 3-4 REAL nearby mandis in ${district}/nearby.
+2. If real market data is provided above, align your "modalPrice" values with it.
+3. If no real data is provided, use your internal knowledge of current ${commodity} price ranges (e.g., Wheat ~2300-2800, Soybean ~4000-5000, etc.). 
+4. DO NOT use generic or placeholder prices.
+5. Provide a specific, helpful summary about ${commodity} trends.
+
+Return JSON ONLY:
 {
   "commodity": "${commodity}",
   "unit": "quintal",
-  "district": "${district}",
-  "state": "${state}",
-  "summary": "1-2 sentence market overview including trend for ${commodity} in ${state} right now",
-  "trend": "rising",
-  "trendPercent": 2.5,
-  "localMarkets": [
-    {
-      "marketName": "Main market name in or near ${district}",
-      "district": "${district}",
-      "distance": "0 km (local)",
-      "minPrice": 4200,
-      "maxPrice": 4800,
-      "modalPrice": 4500,
-      "arrivalQty": "1200 quintals",
-      "quality": "A"
-    },
-    {
-      "marketName": "Nearest mandi 2",
-      "district": "Nearby district name",
-      "distance": "25 km",
-      "minPrice": 4100,
-      "maxPrice": 4700,
-      "modalPrice": 4400,
-      "arrivalQty": "800 quintals",
-      "quality": "B"
-    },
-    {
-      "marketName": "Nearest mandi 3",
-      "district": "Another nearby district",
-      "distance": "45 km",
-      "minPrice": 4300,
-      "maxPrice": 4900,
-      "modalPrice": 4550,
-      "arrivalQty": "2000 quintals",
-      "quality": "A"
-    },
-    {
-      "marketName": "Nearest mandi 4",
-      "district": "4th nearby district",
-      "distance": "60 km",
-      "minPrice": 4000,
-      "maxPrice": 4600,
-      "modalPrice": 4300,
-      "arrivalQty": "500 quintals",
-      "quality": "C"
-    }
-  ],
-  "majorMarkets": [
-    { "marketName": "Top India market 1", "city": "City", "state": "State", "modalPrice": 4600, "trend": "rising", "note": "High arrivals" },
-    { "marketName": "Top India market 2", "city": "City", "state": "State", "modalPrice": 4350, "trend": "stable", "note": "Stable demand" },
-    { "marketName": "Top India market 3", "city": "City", "state": "State", "modalPrice": 4500, "trend": "rising", "note": "Export demand" },
-    { "marketName": "Top India market 4", "city": "City", "state": "State", "modalPrice": 4150, "trend": "falling", "note": "Oversupply" },
-    { "marketName": "Top India market 5", "city": "City", "state": "State", "modalPrice": 4700, "trend": "rising", "note": "Premium quality" },
-    { "marketName": "Top India market 6", "city": "City", "state": "State", "modalPrice": 4250, "trend": "stable", "note": "Normal season" }
-  ],
-  "priceHistory": [
-    { "date": "YYYY-MM-DD", "price": 4300 }
-  ],
-  "seasonalInsight": "Key seasonal factor affecting ${commodity} price right now",
-  "bestTimeToSell": "Advice on when farmer should sell for maximum profit",
-  "mspInfo": "MSP information for ${commodity} if applicable"
+  "summary": "Specific market update for ${commodity} in English",
+  "trend": "rising/stable/falling",
+  "trendPercent": 0.0,
+  "localMarkets": [{ "marketName": "Mandi Name", "district": "District", "distance": "X km", "modalPrice": 0, "minPrice": 0, "maxPrice": 0, "arrivalQty": "Qty", "quality": "A" }],
+  "majorMarkets": [{ "marketName": "Hub Name", "modalPrice": 0, "trend": "rising" }],
+  "priceHistory": [{ "date": "YYYY-MM-DD", "price": 0 }],
+  "seasonalInsight": "Insight",
+  "bestTimeToSell": "Advice",
+  "mspInfo": "Current MSP"
 }
+CRITICAL: Use only ASCII digits (0-9) in all JSON numeric values. Never use commas inside numbers. Never use regional numeral scripts.`;
 
-RULES:
-- localMarkets: REAL mandi names geographically near ${district}, ${state}
-- majorMarkets: actual top 6 commodity markets in India for ${commodity}
-- priceHistory: exactly 30 entries going back 30 days from ${todayStr} with realistic daily fluctuations
-- All prices in INR per quintal, realistic for Feb 2026 India
-- trendPercent: % change over past 7 days (positive = rising)`;
+  const content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.4, 3000);
+  const data = normalizeAndParseJSON(content);
 
-  const response = await client.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.4,
-    max_tokens: 3000,
-  });
-
-  const data = normalizeAndParseJSON(response.choices[0].message.content);
-
-  // Fix priceHistory dates to be accurate
   if (Array.isArray(data.priceHistory)) {
+    const basePrice = data.localMarkets?.[0]?.modalPrice || 0;
     data.priceHistory = data.priceHistory.slice(0, 30).map((row, i) => {
       const d = new Date(today);
       d.setDate(d.getDate() - (29 - i));
-      return { date: d.toISOString().slice(0, 10), price: row.price || row.modalPrice || 4000 };
+      // Use provided price, or basePrice as fallback
+      const price = row.price || row.modalPrice || basePrice || 0;
+      return { date: d.toISOString().slice(0, 10), price };
     });
   }
 
+  setToCache(cacheKey, data, CACHE_TTL.market);
   return data;
 };
 
@@ -630,54 +529,26 @@ RULES:
  * @param {string} language - "en" | "hi" | "mr"
  */
 export const getSeedAndYieldAdvice = async (farmInfo, language = "en", userApiKey = null) => {
+  const cacheKey = `seeds_${farmInfo.primaryCrops?.join("_")}_${farmInfo.address?.district}_${language}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const client = createClient(userApiKey);
   const langName = LANGUAGE_NAMES[language] || "English";
 
-  const prompt = `You are a professional agricultural consultant for Indian farmers.
-Context:
-Crop(s): ${farmInfo.primaryCrops?.join(", ")}
-Farm Area: ${farmInfo.totalArea?.value} ${farmInfo.totalArea?.unit}
-Soil: ${farmInfo.soilType}
-Irrigation: ${farmInfo.irrigationType}
-Location: ${farmInfo.address?.taluka}, ${farmInfo.address?.district}
-Current Stage: ${farmInfo.farmingStage}
-${farmInfo.targetYield ? `User's Target Yield: ${farmInfo.targetYield}` : ""}
-
-Task:
-1. Suggest 3 specific high-quality seed varieties suitable for these conditions.
-2. Provide realistic yield expectations (in quintals/hectare or relevant unit) for these crops in this location.
-3. If the user is at the 'starting' stage, suggest techniques to maximize initial yield.
-4. If 'growing' or 'harvested', provide benchmarking against average yields for this district.
-
-Return ONLY a valid JSON object:
+  const prompt = `Professional Agri-Consultant. Suggest seeds/yield for: ${farmInfo.primaryCrops?.join(", ")}, Soil: ${farmInfo.soilType}, Location: ${farmInfo.address?.district}. 
+Return JSON ONLY in ${langName}:
 {
-  "seedRecommendations": [
-    {
-      "name": "Variety Name",
-      "features": "Why it fits soil/climate in ${langName}",
-      "duration": "Duration in days",
-      "yieldPotential": "Potential yield in ${langName}",
-      "storeType": "Typically available at ${langName}",
-      "searchQuery": "Search term for seed image"
-    }
-  ],
-  "yieldAnalysis": {
-    "estimatedYield": "Suggested yield based on location/crops in ${langName}",
-    "benchmarks": "How this compares to district average in ${langName}",
-    "optimizationTips": ["Tip 1 in ${langName}", "Tip 2"]
-  },
-  "marketContext": "Current market demand for these crops in ${langName}"
+  "seedRecommendations": [{ "name": "Var", "features": "Why", "duration": "Days", "yieldPotential": "Qty", "storeType": "Store", "searchQuery": "query" }],
+  "yieldAnalysis": { "estimatedYield": "Qty", "benchmarks": "Comp", "optimizationTips": ["tip 1"] },
+  "marketContext": "Demand"
 }
-All text in ${langName}. Use ASCII digits. No markdown.`;
+CRITICAL: Use only ASCII digits (0-9). All text must be in ${langName}.`;
 
-  const response = await client.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.4,
-    max_tokens: 2000,
-  });
-
-  return normalizeAndParseJSON(response.choices[0].message.content);
+  const content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.4, 2000);
+  const result = normalizeAndParseJSON(content);
+  setToCache(cacheKey, result, CACHE_TTL.seeds);
+  return result;
 };
 // ─────────────────────────────────────────────────────────────────────────────
 //  7. GOVERNMENT SCHEMES RECOMMENDATION
@@ -687,53 +558,23 @@ All text in ${langName}. Use ASCII digits. No markdown.`;
  * @param {string} language - "en" | "hi" | "mr"
  */
 export const getRecommendedSchemes = async (user, language = "en", userApiKey = null) => {
+  const cacheKey = `schemes_${user.address?.district}_${language}`;
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
   const client = createClient(userApiKey);
   const langName = LANGUAGE_NAMES[language] || "English";
-  const today = new Date().toISOString().slice(0, 10);
 
-  const prompt = `You are a specialized Indian Government Schemes advisor for farmers.
-Current Date: ${today}
-
-Context of the Farmer:
-- Name: ${user.fullName}
-- Location: ${user.address?.taluka}, ${user.address?.district}
-- Farm Size: ${user.farmInfo?.totalArea?.value} ${user.farmInfo?.totalArea?.unit}
-- Crops: ${user.farmInfo?.primaryCrops?.join(", ")}
-- Irrigation: ${user.farmInfo?.irrigationType}
-- Soil: ${user.farmInfo?.soilType}
-
-Your task is to recommend 5 highly relevant, REAL, and CURRENT (March 2026) Indian Government agriculture schemes for this specific farmer.
-Use the following real schemes if they fit: PM-KISAN, PMFBY (Crop Insurance), Kisan Credit Card (KCC), PM-KUSUM (Solar Pumps), Soil Health Card, PKVY (Organic Farming), Agriculture Infrastructure Fund (AIF).
-
-Return ONLY a valid JSON object (no markdown, no code fences):
+  const prompt = `Indian Govt Scheme Advisor. Recommend 5 schemes for farmer in ${user.address?.district} growing ${user.farmInfo?.primaryCrops?.join(", ")}. 
+Return JSON ONLY in ${langName}:
 {
-  "recommendations": [
-    {
-      "id": "unique-slug",
-      "title": "Scheme Name in ${langName}",
-      "shortDescription": "1-sentence catchy description in ${langName}",
-      "benefits": ["Benefit 1 in ${langName}", "Benefit 2"],
-      "eligibility": "Who can apply based on this farmer's profile in ${langName}",
-      "documentsRequired": ["Aadhaar Card", "Land records", "Bank Passbook", "..."],
-      "applicationSteps": ["Step 1 in ${langName}", "Step 2", "..."],
-      "lastDate": "Real or estimated last date (e.g. 31 March 2026) in ${langName}",
-      "websiteUrl": "Actual direct scheme application URL (not just portal)",
-      "officialPortal": "Official government portal URL",
-      "imageKeywords": "4-5 descriptive English keywords for a high-quality, professional image representing this scheme (e.g. 'modern solar panel farm field', 'indian woman farmer receiving gold coins', 'soil testing laboratory equipment', 'organic vegetable harvest indian farmer')",
-      "tags": ["Subsidy", "Insurance", "Solar", "..." ],
-      "relevanceReason": "Why this specific scheme is good for this farmer specifically in ${langName}"
-    }
-  ],
-  "summary": "Short 2-sentence encouraging summary in ${langName} for ${user.fullName}"
+  "recommendations": [{ "id": "slug", "title": "Name", "shortDescription": "Desc", "benefits": ["B1"], "eligibility": "Who", "documentsRequired": ["D1"], "applicationSteps": ["S1"], "lastDate": "Date", "websiteUrl": "URL", "officialPortal": "URL", "imageKeywords": "tags", "tags": ["tag"], "relevanceReason": "Why" }],
+  "summary": "Encouraging summary"
 }
-All text values must be in ${langName}. Use ASCII digits. Be highly specific and helpful.`;
+CRITICAL: Use only ASCII digits (0-9). All text must be in ${langName}.`;
 
-  const response = await client.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.5,
-    max_tokens: 2500,
-  });
-
-  return normalizeAndParseJSON(response.choices[0].message.content);
+  const content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.5, 2500);
+  const result = normalizeAndParseJSON(content);
+  setToCache(cacheKey, result, CACHE_TTL.schemes);
+  return result;
 };

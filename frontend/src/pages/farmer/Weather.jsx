@@ -267,8 +267,8 @@ const Weather = () => {
       );
       setImpact(res.data.impact);
       setTimeout(() => impactRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
-    } catch {
-      setImpactError('Could not analyze weather impact. Please try again.');
+    } catch (err) {
+      setImpactError(err.response?.data?.message || 'Could not analyze weather impact. Please try again.');
     } finally {
       setImpactLoading(false);
     }
@@ -456,6 +456,11 @@ const Weather = () => {
                       {currentWeather.temperature}°
                     </div>
                     <p style={{ fontSize: 13, color: isDark ? '#64748b' : '#475569', margin: '4px 0 0' }}>{t('Feels like')} {currentWeather.feelsLike}°C</p>
+                    {dailyForecast.length > 0 && (
+                      <p style={{ fontSize: 12, fontWeight: 700, color: '#f87171', margin: '4px 0 0' }}>
+                        H: {dailyForecast[0].maxTemp}° <span style={{ color: '#60a5fa' }}>L: {dailyForecast[0].minTemp}°</span>
+                      </p>
+                    )}
                   </div>
                 </div>
 

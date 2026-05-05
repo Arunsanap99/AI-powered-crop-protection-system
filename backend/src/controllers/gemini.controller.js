@@ -132,6 +132,8 @@ export const weatherCropImpact = asyncHandler(async (req, res) => {
     res.json({ success: true, impact });
 });
 
+import MarketPrice from "../models/marketPrice.model.js";
+
 /**
  * POST /api/v1/disease-info/market-prices
  * Body: { commodity, district?, state? }
@@ -148,15 +150,36 @@ export const marketPrices = asyncHandler(async (req, res) => {
     // Use profile location if caller didn't pass one
     let district = bodyDistrict;
     let state = bodyState;
+    const user = await User.findById(req.user._id).lean();
+
     if (!district || !state) {
-        const user = await User.findById(req.user._id).lean();
         district = district || user?.address?.district || "Nashik";
-        state = state || "Maharashtra"; // default
+        state = state || user?.address?.state || "Maharashtra";
     }
 
-    const user = await User.findById(req.user._id).lean();
-    const data = await getMarketPrices(commodity, district, state, user?.groqApiKey);
-    res.json({ success: true, data });
+    // ── GROUND TRUTH SEARCH ──
+    // Look for actual scraped data in the database for this region/crop
+    // This helps the AI anchor its "prediction" to real numbers
+    const realPrices = await MarketPrice.find({
+        commodity: { $regex: new RegExp(commodity, 'i') },
+        state: { $regex: new RegExp(state, 'i') }
+    }).sort({ publishDate: -1 }).limit(5).lean();
+
+    const realDataContext = realPrices.length > 0 
+        ? realPrices.map(rp => `${rp.district}: ₹${rp.pricePerQuintal} (${rp.sourceName}, ${new Date(rp.publishDate).toLocaleDateString()})`).join(", ")
+        : "No recent government data found for this specific region.";
+
+    const data = await getMarketPrices(commodity, district, state, user?.groqApiKey, realDataContext);
+    
+    // Flag if the data is anchored to real results
+    res.json({ 
+        success: true, 
+        data: {
+            ...data,
+            isEstimated: realPrices.length === 0,
+            groundTruthCount: realPrices.length
+        } 
+    });
 });
 
 /**

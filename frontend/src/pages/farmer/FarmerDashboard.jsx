@@ -47,12 +47,19 @@ const farmerIcon = L.divIcon({
   </div>`,
   className: '', iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20],
 });
-const agroIcon = L.divIcon({
-  html: `<div style="background:#2563eb;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);color:white">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2h-.2a5 5 0 0 0-4.4 7.2l4.4 8.3a.3.3 0 1 0 .3 0l4.4-8.3A5 5 0 0 0 10 2h-.2M7 2v5M5 4.5h4"/></svg>
+
+const createAgroIcon = (photoUrl) => L.divIcon({
+  html: `<div style="background:#2563eb;width:40px;height:40px;border-radius:50%;padding:2px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 3px 12px rgba(37,99,235,0.4);position:relative;">
+    <div style="width:100%;height:100%;border-radius:50%;overflow:hidden;background:#e2e8f0;background-image:url('${photoUrl}');background-size:cover;background-position:center;border:1px solid rgba(255,255,255,0.2);">
+    </div>
+    <div style="position:absolute;bottom:0px;right:0px;width:12px;height:12px;background:#10b981;border:2.5px solid #fff;border-radius:50%;z-index:10;box-shadow:0 1px 4px rgba(0,0,0,0.2);"></div>
   </div>`,
-  className: '', iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -18],
+  className: 'agro-marker-icon',
+  iconSize: [40, 40],
+  iconAnchor: [20, 20],
+  popupAnchor: [0, -22],
 });
+
 const marketIcon = L.divIcon({
   html: `<div style="background:#b45309;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);color:white">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -122,7 +129,7 @@ function RiskRing({ value, label, color, suffix = '%', active }) {
 // ══════════════════════════════════════════════════════════════════════════
 const FarmerDashboard = () => {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const { isDark } = useTheme();
 
   // State
@@ -137,6 +144,8 @@ const FarmerDashboard = () => {
   const [mapLayer, setMapLayer] = useState('agronomists'); // 'agronomists' | 'markets'
   const [heroVisible, setHeroVisible] = useState(false);
   const [myCrops, setMyCrops] = useState([]);
+  const [marketPrices, setMarketPrices] = useState([]);
+  const [loadingPrices, setLoadingPrices] = useState(true);
   const [weatherRisk, setWeatherRisk] = useState(34);
   const [diseaseRisk, setDiseaseRisk] = useState(22);
   const [marketTrend, setMarketTrend] = useState(71);
@@ -198,8 +207,23 @@ const FarmerDashboard = () => {
       }
     };
     fetchLocalAgronomists();
-    // Fetch crops for hero section
-    cropAPI.getCrops().then(r => setMyCrops(r.data || [])).catch(() => { });
+    // Fetch crops and their market prices
+    const fetchCropsAndPrices = async () => {
+      try {
+        const cropRes = await cropAPI.getCrops();
+        const crops = cropRes.data || [];
+        setMyCrops(crops);
+
+        setLoadingPrices(true);
+        const priceRes = await marketAPI.getMyCropPrices();
+        setMarketPrices(priceRes.data?.prices || []);
+      } catch (err) {
+        console.error('Failed to load crops or prices:', err);
+      } finally {
+        setLoadingPrices(false);
+      }
+    };
+    fetchCropsAndPrices();
   }, []);
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -285,8 +309,14 @@ const FarmerDashboard = () => {
                   {t('AI Farm Intelligence Engine Active')}
                 </div>
 
-                <p className="text-emerald-300 text-sm font-semibold mb-1 flex items-center gap-2">
-                  <GreetIcon size={18} className="text-yellow-400" /> {greeting}
+                <p className="text-emerald-300 text-sm font-semibold mb-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="flex items-center gap-2">
+                    <GreetIcon size={18} className="text-yellow-400" /> {greeting}
+                  </span>
+                  <span className="w-1 h-1 bg-emerald-400/40 rounded-full hidden sm:block" />
+                  <span className="text-emerald-200/70 font-bold uppercase tracking-wider text-[10px]">
+                    {new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
                 </p>
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-2 leading-tight">
                   {user?.fullName?.split(' ')[0]}
@@ -333,6 +363,67 @@ const FarmerDashboard = () => {
 
             </div>
           </div>
+        </div>
+
+        {/* ══ 1.5 REAL-TIME MARKET PRICES ══════════════════════════════════════ */}
+        <div className="fade-up" style={{ animationDelay: '0.1s' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className={`text-lg font-extrabold flex items-center gap-2 ${textH}`}>
+              <LineChart size={20} className="text-violet-500" /> {t('Live Mandi Prices')}
+            </h2>
+            <Link to="/farmer/market" className={`text-xs font-bold text-violet-500 hover:underline`}>{t('View Market Analysis')}</Link>
+          </div>
+
+          {loadingPrices ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className={`h-24 rounded-2xl animate-pulse ${isDark ? 'bg-white/5' : 'bg-gray-100'}`} />
+              ))}
+            </div>
+          ) : marketPrices.length === 0 ? (
+            <div className={`p-6 rounded-2xl border text-center ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-100'}`}>
+              <p className={`text-sm ${textS}`}>{t('Add crops to see real-time mandi prices here.')}</p>
+              <Link to="/farmer/crops" className="inline-block mt-2 text-xs font-bold text-emerald-600 hover:underline">{t('Add Your First Crop')}</Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {marketPrices.map((price, idx) => (
+                <div key={idx} className={`relative overflow-hidden group card-lift rounded-2xl border p-4 ${cardBase} transition-all`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center text-lg">
+                        {price.requestedCrop === 'Cotton' ? '🌿' : price.requestedCrop === 'Soybean' ? '🫘' : '🌾'}
+                      </div>
+                      <div>
+                        <h3 className={`font-extrabold text-sm ${textH}`}>{price.requestedCrop}</h3>
+                        <p className={`text-[10px] ${textS} flex items-center gap-1`}>
+                          <MapPin size={10} /> {price.district}
+                        </p>
+                      </div>
+                    </div>
+                    <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {t('Live')}
+                    </div>
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className={`text-xl font-black ${textH}`}>₹{price.pricePerQuintal?.toLocaleString('en-IN')}</span>
+                    <span className={`text-[10px] font-bold ${textS}`}>/qtl</span>
+                  </div>
+                  <div className={`text-[10px] font-bold ${textS} mt-0.5 flex justify-between`}>
+                    <span>Min: ₹{(price.minPrice || price.pricePerQuintal * 0.94).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                    <span>Max: ₹{(price.maxPrice || price.pricePerQuintal * 1.06).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <TrendingUp size={12} className="text-emerald-500" />
+                    <span className="text-[10px] font-bold text-emerald-500">+2.4% {t('this week')}</span>
+                  </div>
+                  {/* Decorative background glow */}
+                  <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-violet-500/5 rounded-full blur-2xl group-hover:bg-violet-500/10 transition-colors" />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ══ 2. INTERACTIVE MAP ══════════════════════════════════════════════ */}
@@ -416,14 +507,26 @@ const FarmerDashboard = () => {
                   const agLat = ag.location?.coordinates?.[1];
                   const agLng = ag.location?.coordinates?.[0];
                   if (!agLat || !agLng) return null;
+                  const markerPhoto = ag.profilePhotoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(ag.fullName)}&background=2563eb&color=fff`;
                   return (
-                    <Marker key={ag.id || i} position={[agLat, agLng]} icon={agroIcon}>
+                    <Marker key={ag.id || i} position={[agLat, agLng]} icon={createAgroIcon(markerPhoto)}>
                       <Popup>
                         <div className="p-3 min-w-[180px]">
-                          <p className="font-extrabold text-gray-900 text-sm mb-0.5 flex items-center gap-1.5">
-                            <UserIcon size={14} className="text-blue-600" /> {ag.fullName}
-                          </p>
-                          <p className="text-xs text-blue-600 font-semibold mb-2">{t('Verified Agronomist')}</p>
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-100 shadow-sm">
+                              <img
+                                src={ag.profilePhotoUrl || `https://ui-avatars.com/api/?name=${ag.fullName}&background=2563eb&color=fff`}
+                                alt={ag.fullName}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div>
+                              <p className="font-extrabold text-gray-900 text-sm leading-tight">
+                                {ag.fullName}
+                              </p>
+                              <p className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider">{t('Verified Expert')}</p>
+                            </div>
+                          </div>
                           {ag.mobileNumber && (
                             <div className="flex gap-2">
                               <a href={`tel:${ag.mobileNumber}`} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 text-white text-[10px] font-bold py-1.5 rounded-lg">

@@ -22,8 +22,9 @@ import {
     Send,
     MessageSquare,
     Sparkles,
-    MapPin,
+    MapPin as MapPinIcon,
     Lightbulb,
+    LineChart,
     Mic,
     MicOff,
     Volume2,
@@ -214,7 +215,7 @@ const AIChatbot = () => {
     const [availableVoices, setAvailableVoices] = useState([]);
     const [showQuickQ, setShowQuickQ] = useState(true);
     const [chatLang, setChatLang] = useState(lang === 'hi' || lang === 'mr' ? lang : 'en');
-    const [isListening, setIsListening] = useState(false);
+    const [isSTTActive, setIsSTTActive] = useState(false);
     const [speakingId, setSpeakingId] = useState(null);
     const [showKeyModal, setShowKeyModal] = useState(false);
 
@@ -234,6 +235,19 @@ const AIChatbot = () => {
             window.speechSynthesis.onvoiceschanged = loadVoices;
         }
     }, []);
+
+    // Sync chat language with global application language initially
+    const hasInitialSync = useRef(false);
+    useEffect(() => {
+        if (!hasInitialSync.current && lang) {
+            if (lang === 'mr' || lang === 'hi') {
+                setChatLang(lang);
+            } else {
+                setChatLang('en');
+            }
+            hasInitialSync.current = true;
+        }
+    }, [lang]);
 
     const saveVoicePreference = (voiceName) => {
         setPreferredVoice(voiceName);
@@ -359,22 +373,51 @@ Is page, fasal ki bimari, kheti ya Krishi Kavach ke features ke baare mein kuch 
             return;
         }
 
-        if (isListening) {
+        if (isSTTActive) {
             recognitionRef.current?.stop();
             return;
         }
 
         const recognition = new SpeechRecognition();
-        recognition.lang = chatLang === 'mr' ? 'mr-IN' : chatLang === 'hi' ? 'hi-IN' : 'en-IN';
-        recognition.interimResults = false;
-        recognition.continuous = false;
+        // Enhanced Marathi support: set lang and also add hints if possible
+        const targetLang = chatLang === 'mr' ? 'mr-IN' : (chatLang === 'hi' || chatLang === 'hinglish') ? 'hi-IN' : 'en-IN';
 
-        recognition.onstart = () => setIsListening(true);
-        recognition.onend = () => setIsListening(false);
-        recognition.onerror = () => setIsListening(false);
+        try {
+            recognition.lang = targetLang;
+        } catch (e) {
+            console.warn("STT: Fallback to short lang code", chatLang);
+            recognition.lang = chatLang;
+        }
+
+        recognition.interimResults = true;
+        recognition.continuous = true;
+
+        recognition.onstart = () => setIsSTTActive(true);
+        recognition.onend = () => setIsSTTActive(false);
+        recognition.onerror = () => setIsSTTActive(false);
+
         recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            setInput(transcript);
+            let finalTranscript = '';
+            let interimTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+
+            // Show real-time feedback: Current Final + new Interim
+            if (finalTranscript || interimTranscript) {
+                setInput(prev => {
+                    // Logic: Keep existing text that wasn't part of this STT session, 
+                    // then append the new final results and current interim results.
+                    // For simplicity in a 'continuous' session, we just manage the delta.
+                    const currentWords = finalTranscript + interimTranscript;
+                    return currentWords.trim();
+                });
+            }
         };
 
         recognitionRef.current = recognition;
@@ -402,34 +445,33 @@ Is page, fasal ki bimari, kheti ya Krishi Kavach ke features ke baare mein kuch 
             .replace(/\n/g, '. ')       // Newline to pause
             .trim();
 
+        const isMarathi = chatLang === 'mr';
+        const isHindi = chatLang === 'hi' || chatLang === 'hinglish';
+        const targetLangMatch = isMarathi ? 'mr-IN' : isHindi ? 'hi-IN' : 'en-IN';
+
         const utterance = new SpeechSynthesisUtterance(cleanText);
 
         // Find best voice match:
         let voice = null;
         if (preferredVoice) {
-            voice = voices.find(v => v.name === preferredVoice);
+            voice = availableVoices.find(v => v.name === preferredVoice);
         }
 
         if (!voice) {
-            const isMarathi = chatLang === 'mr';
-            const isHindi = chatLang === 'hi' || chatLang === 'hinglish';
-            const targetLangMatch = isMarathi ? 'mr-IN' : isHindi ? 'hi-IN' : 'en-IN';
             const priorityKeywords = isMarathi ? ['google', 'marathi'] : isHindi ? ['google', 'hindi'] : ['google', 'english', 'india'];
 
-            voice = voices.find(v => priorityKeywords.every(kw => v.name.toLowerCase().includes(kw))) ||
-                voices.find(v => v.lang.replace('_', '-') === targetLangMatch && v.name.toLowerCase().includes('google')) ||
-                voices.find(v => v.lang.replace('_', '-') === targetLangMatch) ||
-                voices.find(v => v.name.toLowerCase().includes(isMarathi ? 'marathi' : isHindi ? 'hindi' : 'english')) ||
-                voices[0];
+            voice = availableVoices.find(v => priorityKeywords.every(kw => v.name.toLowerCase().includes(kw))) ||
+                availableVoices.find(v => v.lang.replace('_', '-').startsWith(isMarathi ? 'mr' : isHindi ? 'hi' : 'en') && v.name.toLowerCase().includes('google')) ||
+                availableVoices.find(v => v.lang.replace('_', '-').startsWith(isMarathi ? 'mr' : isHindi ? 'hi' : 'en')) ||
+                availableVoices.find(v => v.name.toLowerCase().includes(isMarathi ? 'marathi' : isHindi ? 'hindi' : 'english')) ||
+                availableVoices[0];
         }
 
         if (voice) {
             utterance.voice = voice;
-            utterance.lang = voice.lang;
+            utterance.lang = targetLangMatch;
         } else {
-            const isMarathi = chatLang === 'mr';
-            const isHindi = chatLang === 'hi' || chatLang === 'hinglish';
-            utterance.lang = isMarathi ? 'mr-IN' : isHindi ? 'hi-IN' : 'en-IN';
+            utterance.lang = targetLangMatch;
         }
 
         utterance.rate = 1.0;
@@ -627,10 +669,33 @@ Is page, fasal ki bimari, kheti ya Krishi Kavach ke features ke baare mein kuch 
                             </div>
                         </div>
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => setShowSettings(!showSettings)}
-                                className={`text-violet-200 hover:text-white hover:bg-white/20 w-8 h-8 rounded-full
-                  flex items-center justify-center transition-colors ${showSettings ? 'bg-white/20 text-white' : ''}`} title="Voice settings">
-                                <Volume2 size={16} />
+                            <button
+                                onClick={() => {
+                                    const langs = ['en', 'hi', 'mr'];
+                                    const nextIdx = (langs.indexOf(chatLang) + 1) % langs.length;
+                                    setChatLang(langs[nextIdx]);
+                                }}
+                                className="relative text-violet-200 hover:text-white hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                                title={`Switch Language (Current: ${chatLang.toUpperCase()})`}
+                            >
+                                <Languages size={16} />
+                                <span className="absolute -top-1 -right-1 text-[8px] bg-amber-400 text-amber-950 font-bold px-1 rounded-sm uppercase border border-violet-700">
+                                    {chatLang}
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (speakingId) {
+                                        window.speechSynthesis.cancel();
+                                        setSpeakingId(null);
+                                    } else {
+                                        setShowSettings(!showSettings);
+                                    }
+                                }}
+                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${speakingId ? 'bg-white text-red-600 animate-pulse' : 'text-violet-200 hover:text-white hover:bg-white/20'}`}
+                                title={speakingId ? "Stop speaking" : "Voice settings"}
+                            >
+                                {speakingId ? <VolumeX size={16} /> : <Volume2 size={16} />}
                             </button>
                             <button onClick={clearChat}
                                 className="text-violet-200 hover:text-white hover:bg-white/20 w-8 h-8 rounded-full
@@ -668,11 +733,17 @@ Is page, fasal ki bimari, kheti ya Krishi Kavach ke features ke baare mein kuch 
                                                 Auto (Smart Selection)
                                             </button>
                                             {availableVoices
-                                                .filter(v => v.lang.startsWith('hi') || v.lang.startsWith('mr') || v.lang.startsWith('en'))
+                                                .filter(v => {
+                                                    const isMR = chatLang === 'mr';
+                                                    const isHI = chatLang === 'hi' || chatLang === 'hinglish';
+                                                    if (isMR) return v.lang.startsWith('mr');
+                                                    if (isHI) return v.lang.startsWith('hi');
+                                                    return v.lang.startsWith('en');
+                                                })
                                                 .sort((a, b) => {
-                                                    // Prioritize Google Hindi as requested
-                                                    const aG = a.name.includes('Google') && (a.name.includes('Hindi') || a.name.includes('हिंदी'));
-                                                    const bG = b.name.includes('Google') && (b.name.includes('Hindi') || b.name.includes('हिंदी'));
+                                                    // Prioritize Google voices for better quality
+                                                    const aG = a.name.includes('Google');
+                                                    const bG = b.name.includes('Google');
                                                     if (aG && !bG) return -1;
                                                     if (!aG && bG) return 1;
                                                     return 0;
@@ -687,11 +758,25 @@ Is page, fasal ki bimari, kheti ya Krishi Kavach ke features ke baare mein kuch 
                                                         <div className={`text-[10px] ${preferredVoice === v.name ? 'text-violet-200' : 'text-gray-400'}`}>{v.lang}</div>
                                                     </button>
                                                 ))}
+                                            {availableVoices.filter(v => {
+                                                const isMR = chatLang === 'mr';
+                                                const isHI = chatLang === 'hi' || chatLang === 'hinglish';
+                                                if (isMR) return v.lang.startsWith('mr');
+                                                if (isHI) return v.lang.startsWith('hi');
+                                                return v.lang.startsWith('en');
+                                            }).length === 0 && (
+                                                    <p className="text-[10px] text-gray-400 text-center py-4 italic">No high-quality {chatLang} voices found on this device.</p>
+                                                )}
+                                        </div>
+                                        <div className="mt-2 pt-2 border-t border-gray-100">
+                                            <p className="text-[10px] text-gray-400 text-center">
+                                                Active Language: <span className="font-bold text-violet-600 uppercase">{chatLang}</span>
+                                            </p>
                                         </div>
                                     </div>
                                 )}
                                 <div className="bg-violet-50 border border-violet-200 rounded-xl px-2.5 py-1 flex items-center gap-1.5">
-                                    <MapPin size={12} className="text-violet-500" />
+                                    <MapPinIcon size={12} className="text-violet-500" />
                                     <p className="text-xs text-violet-700 font-medium truncate max-w-[140px]">
                                         {location.pathname === '/' ? 'Home' : location.pathname}
                                     </p>
@@ -772,10 +857,10 @@ Is page, fasal ki bimari, kheti ya Krishi Kavach ke features ke baare mein kuch 
                                         <button
                                             type="button"
                                             onClick={startListening}
-                                            className={`p-1.5 rounded-full transition-all ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-500 hover:bg-violet-100 hover:text-violet-600'}`}
-                                            title={isListening ? "Stop listening" : "Start voice input"}
+                                            className={`p-1.5 rounded-full transition-all ${isSTTActive ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-500 hover:bg-violet-100 hover:text-violet-600'}`}
+                                            title={isSTTActive ? "Stop listening" : "Start voice input"}
                                         >
-                                            {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                                            {isSTTActive ? <MicOff size={16} /> : <Mic size={16} />}
                                         </button>
                                     </div>
                                 </div>

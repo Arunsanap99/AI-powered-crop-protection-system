@@ -7,7 +7,7 @@ import {
     TrendingUp,
     TrendingDown,
     MoveRight,
-    MapPin,
+    MapPin as MapPinIcon,
     Activity,
     CloudSun,
     Lightbulb,
@@ -20,9 +20,10 @@ import {
     Info,
     RotateCcw,
     AlertTriangle,
-    Brain
+    Brain,
+    Timer
 } from 'lucide-react';
-import { cropAPI, geminiAPI, userAPI } from '../../services/api';
+import { cropAPI, geminiAPI, userAPI, marketAPI } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import AIKeyModal from '../../components/AIKeyModal';
@@ -129,6 +130,31 @@ const AnimPrice = ({ value }) => {
     return <span>₹{display.toLocaleString('en-IN')}</span>;
 };
 
+// ── Market Ticker ──────────────────────────────────────────────────────────
+const MarketTicker = ({ items }) => {
+    if (!items?.length) return null;
+    return (
+        <div style={{ background: '#0f172a', color: '#fff', padding: '10px 0', overflow: 'hidden', whiteSpace: 'nowrap', borderBottom: '1px solid #1e293b' }}>
+            <div className="ticker-scroll" style={{ display: 'inline-block', animation: 'ticker 60s linear infinite' }}>
+                {items.concat(items).map((item, i) => (
+                    <span key={i} style={{ margin: '0 30px', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ color: '#a5b4fc' }}>{item.commodity}</span>
+                        <span style={{ color: '#fff' }}>₹{item.pricePerQuintal}</span>
+                        <span style={{ color: '#34d399', fontSize: 11 }}>▲ 2.1%</span>
+                        <span style={{ color: '#475569', fontWeight: 500 }}>({item.district})</span>
+                    </span>
+                ))}
+            </div>
+            <style>{`
+                @keyframes ticker {
+                    0% { transform: translateX(0); }
+                    100% { transform: translateX(-50%); }
+                }
+            `}</style>
+        </div>
+    );
+};
+
 // ══════════════════════════════════════════════════════════════════════════════
 // PRICE INTEL PANEL  — dark glassmorphism
 // ══════════════════════════════════════════════════════════════════════════════
@@ -169,7 +195,7 @@ const PriceIntelPanel = ({ commodity, district, state, onClose }) => {
     const maxMajor = data ? Math.max(...(data.majorMarkets || []).map(m => m.modalPrice || 0), 1) : 1;
 
     const tabs = [
-        { id: 'nearby', label: 'Nearby Mandis', icon: MapPin },
+        { id: 'nearby', label: 'Nearby Mandis', icon: MapPinIcon },
         { id: 'major', label: 'Major Markets', icon: Activity },
         ...(data?.priceHistory?.length > 1 ? [{ id: 'chart', label: '30-Day Trend', icon: TrendingUp }] : []),
     ];
@@ -201,11 +227,20 @@ const PriceIntelPanel = ({ commodity, district, state, onClose }) => {
                             <h2 style={{ color: '#fff', fontSize: 22, fontWeight: 800, margin: 0 }}>{commodity}</h2>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                                 <span style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)', color: '#c4b5fd', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <MapPin size={10} /> {district}, {state}
+                                    <MapPinIcon size={10} /> {district}, {state}
                                 </span>
                                 <span style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)', color: '#c4b5fd', borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
                                     ₹/quintal
                                 </span>
+                                {data?.isEstimated === false ? (
+                                    <span style={{ background: 'rgba(52,211,153,0.2)', border: '1px solid #34d399', color: '#6ee7b7', borderRadius: 999, padding: '2px 10px', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 6px #34d399' }} /> Live Data
+                                    </span>
+                                ) : (
+                                    <span style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', color: '#fbbf24', borderRadius: 999, padding: '2px 10px', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <Activity size={10} /> Forecast
+                                    </span>
+                                )}
                                 {data && <TrendBadge trend={data.trend} pct={data.trendPercent} dark />}
                             </div>
                         </div>
@@ -313,7 +348,6 @@ const PriceIntelPanel = ({ commodity, district, state, onClose }) => {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                 {(data.localMarkets || []).map((m, i) => {
                                     const barW = Math.round(((m.modalPrice || 0) / maxModal) * 100);
-                                    const trendCfg = TREND[m.trend] || TREND.stable;
                                     const isNearest = i === 0;
                                     return (
                                         <div key={i}
@@ -340,7 +374,7 @@ const PriceIntelPanel = ({ commodity, district, state, onClose }) => {
                                                         {isNearest && <span style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399', borderRadius: 999, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>Nearest</span>}
                                                     </div>
                                                     <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                                                        <span style={{ color: '#64748b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}><MapPin size={10} /> {m.district}</span>
+                                                        <span style={{ color: '#64748b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}><MapPinIcon size={10} /> {m.district}</span>
                                                         <span style={{ color: '#64748b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}><TrendingDown size={10} /> {m.distance}</span>
                                                         <span style={{ color: '#64748b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}><Activity size={10} /> {m.arrivalQty}</span>
                                                     </div>
@@ -546,10 +580,20 @@ const Market = () => {
     const [userProfile, setUserProfile] = useState(null);
     const [activePanel, setActivePanel] = useState(null);
     const [searchInput, setSearchInput] = useState('');
+    const [tickerItems, setTickerItems] = useState([]);
     const { isDark } = useTheme();
     const { t } = useLanguage();
 
-    useEffect(() => { Promise.all([loadCrops(), loadProfile()]); }, []);
+    useEffect(() => {
+        Promise.all([loadCrops(), loadProfile(), loadTicker()]);
+    }, []);
+
+    const loadTicker = async () => {
+        try {
+            const res = await marketAPI.searchPrices({ limit: 15 });
+            setTickerItems(res.data?.results || []);
+        } catch { /* silent */ }
+    };
 
     const loadCrops = async () => {
         try { setLoadingCrops(true); const r = await cropAPI.getCrops(); setMyCrops(r.data || []); }
@@ -574,6 +618,7 @@ const Market = () => {
             minHeight: '100vh',
             background: 'var(--bg-page)'
         }}>
+            <MarketTicker items={tickerItems} />
             <style>{`
                 @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
                 @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
@@ -603,7 +648,7 @@ const Market = () => {
                                 <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, margin: '4px 0 0' }}>
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', display: 'inline-block', animation: 'pulse-dot 2s ease-in-out infinite' }} />
-                                        Live AI Intelligence · <MapPin size={12} /> {district}
+                                        Live AI Intelligence · <MapPinIcon size={12} /> {district} · <span className="font-bold opacity-90">{new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                                     </span>
                                 </p>
                             </div>

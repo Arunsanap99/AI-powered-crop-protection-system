@@ -67,20 +67,24 @@ export const findLocalExperts = asyncHandler(async (req, res) => {
   // 2. Find verified agronomists and populate user + profile photo
   const expertProfiles = await AgronomistProfile.find({
     status: 'verified',
-  }).populate({
-    path: 'user',
-    select: 'fullName mobileNumber address profilePhoto',
-    populate: {
-      path: 'profilePhoto',
-      select: 'url',
-    },
-  });
+  }).populate([
+    {
+      path: 'user',
+      select: 'fullName mobileNumber address profilePhoto location',
+      populate: {
+        path: 'profilePhoto',
+        model: 'Media',
+        select: 'url'
+      }
+    }
+  ]);
 
   // 3. Filter agronomists that share the same district and format response
   const localExperts = expertProfiles
     .filter(profile => {
-      const agronomistDistrict = profile.user?.address?.district?.trim().toLowerCase();
-      return profile.user && agronomistDistrict && agronomistDistrict === farmerDistrict;
+      const agronomistDistrict = profile.user?.address?.district?.trim().toLowerCase().replace(/\s+district$/, '');
+      const cleanFarmerDistrict = farmerDistrict.replace(/\s+district$/, '');
+      return profile.user && agronomistDistrict && agronomistDistrict === cleanFarmerDistrict;
     })
     .map(profile => ({
       id: profile._id,
@@ -90,8 +94,11 @@ export const findLocalExperts = asyncHandler(async (req, res) => {
       profilePhotoUrl: profile.user.profilePhoto?.url || null,
       qualification: profile.qualification,
       experience: profile.experience,
+      location: profile.user.location,
+      bio: profile.bio
     }));
 
+  console.log(`Found ${localExperts.length} local experts. Photos:`, localExperts.map(e => e.profilePhotoUrl ? 'YES' : 'NO'));
   res.json(localExperts);
 });
 
@@ -108,7 +115,7 @@ export const findLocalFarmers = asyncHandler(async (req, res) => {
   const farmers = await User.find({
     role: 'farmer',
   })
-    .select('fullName mobileNumber address profilePhoto')
+    .select('fullName mobileNumber address profilePhoto location')
     .populate({
       path: 'profilePhoto',
       select: 'url',
@@ -117,8 +124,9 @@ export const findLocalFarmers = asyncHandler(async (req, res) => {
   // 3. Filter farmers that share the same district and format response
   const localFarmers = farmers
     .filter(farmer => {
-      const farmerDistrict = farmer.address?.district?.trim().toLowerCase();
-      return farmerDistrict && farmerDistrict === agronomistDistrict;
+      const farmerDistrict = farmer.address?.district?.trim().toLowerCase().replace(/\s+district$/, '');
+      const cleanAgronomistDistrict = agronomistDistrict.replace(/\s+district$/, '');
+      return farmerDistrict && farmerDistrict === cleanAgronomistDistrict;
     })
     .map(farmer => ({
       id: farmer._id,
@@ -126,6 +134,7 @@ export const findLocalFarmers = asyncHandler(async (req, res) => {
       mobileNumber: farmer.mobileNumber,
       district: farmer.address?.district || '',
       profilePhotoUrl: farmer.profilePhoto?.url || null,
+      location: farmer.location
     }));
 
   res.json(localFarmers);
