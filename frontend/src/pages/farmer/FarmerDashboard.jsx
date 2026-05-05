@@ -206,7 +206,12 @@ const FarmerDashboard = () => {
         setLoadingAgronomists(false);
       }
     };
-    fetchLocalAgronomists();
+    if (user?.address?.district) {
+      fetchLocalAgronomists();
+    } else {
+      setLoadingAgronomists(false);
+      setAgronomistError('Please update your location to see local experts.');
+    }
     // Fetch crops and their market prices
     const fetchCropsAndPrices = async () => {
       try {
@@ -315,7 +320,7 @@ const FarmerDashboard = () => {
                   </span>
                   <span className="w-1 h-1 bg-emerald-400/40 rounded-full hidden sm:block" />
                   <span className="text-emerald-200/70 font-bold uppercase tracking-wider text-[10px]">
-                    {new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                    {new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </p>
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-2 leading-tight">

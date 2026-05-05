@@ -66,7 +66,7 @@ const Schemes = () => {
                     stepDate.setDate(today.getDate() + (sIdx * 5) + 2); // Steps 5 days apart
                     return {
                         text: step,
-                        targetDate: stepDate.toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short' })
+                        targetDate: stepDate.toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { day: 'numeric', month: 'short' })
                     };
                 });
 
@@ -75,7 +75,7 @@ const Schemes = () => {
                 let keyStat = t('Verified Benefit');
                 let portal = "india.gov.in";
                 let benefitRange = "";
-                const lastUpdated = new Date().toLocaleTimeString(lang === 'hi' ? 'hi-IN' : 'en-IN', { hour: '2-digit', minute: '2-digit' });
+                const lastUpdated = new Date().toLocaleTimeString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { hour: '2-digit', minute: '2-digit' });
                 
                 let documentsRequired = s.documentsRequired || [];
                 const schemeTitle = (s.title || "").toLowerCase();
@@ -232,8 +232,9 @@ const Schemes = () => {
                                 </span>
                             ))}
                             <div className="px-4 py-1.5 bg-black/40 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-emerald-400 border border-emerald-500/30 flex items-center gap-2 shadow-lg">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                {t('Verified Live')} · {new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                <span className="flex items-center gap-1">
+                                    {t('Verified Live')} · {new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </span>
                             </div>
                         </div>
                         <h1 className="text-3xl sm:text-5xl font-black text-white leading-tight">
@@ -432,9 +433,9 @@ const Schemes = () => {
                             <p className="text-[var(--text-secondary)] text-xl font-medium max-w-2xl">
                                 {t('We matched these live opportunities based on your farm profile and regional data.')}
                             </p>
-                            <div className="flex items-center gap-2 mt-4 text-[var(--accent-primary)] text-sm font-black uppercase tracking-widest bg-[var(--accent-primary)]/10 w-fit px-4 py-1.5 rounded-lg border border-[var(--accent-primary)]/20 shadow-sm">
+                            <div className="flex items-center gap-2 bg-emerald-50 dark:bg-white/5 border border-emerald-100 dark:border-white/10 px-4 py-2 rounded-2xl text-xs font-bold text-emerald-700 dark:text-emerald-400">
                                 <Calendar size={14} />
-                                <span>{new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                <span>{new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
                             </div>
                         </div>
                         <button

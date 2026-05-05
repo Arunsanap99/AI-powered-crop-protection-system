@@ -16,12 +16,22 @@ const connectDB = async () => {
       console.warn("⚠️ Could not set custom DNS servers, using system defaults:", dnsErr.message);
     }
 
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    let conn;
+    try {
+      console.log("⏳ Attempting to connect to MongoDB Atlas...");
+      conn = await mongoose.connect(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 5000, // Timeout after 5s if Atlas is down
+      });
+    } catch (atlasErr) {
+      console.warn("⚠️ Atlas Connection Failed. Falling back to Localhost...");
+      const localUri = "mongodb://localhost:27017/krushikavach";
+      conn = await mongoose.connect(localUri);
+    }
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
-    console.error(`❌ MongoDB Connection Error: ${error.message}`);
-    process.exit(1); // Exit process with failure
+    console.error(`❌ All MongoDB Connection Attempts Failed: ${error.message}`);
+    process.exit(1);
   }
 };
 

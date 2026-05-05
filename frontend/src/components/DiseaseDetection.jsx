@@ -1379,7 +1379,7 @@ const DiseaseDetection = ({ onDetectionComplete }) => {
                             {t('Confidence')}: <strong>{report.confidence}%</strong>
                           </span>
                           <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                            {new Date(report.createdAt).toLocaleDateString()}
+                            {new Date(report.createdAt).toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { day: 'numeric', month: 'short', year: 'numeric' })}
                           </span>
                         </div>
                       </div>

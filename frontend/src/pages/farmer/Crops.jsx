@@ -793,7 +793,7 @@ const CropManagement = () => {
                           <p className="text-xs text-gray-500">Variety: <strong>{crop.cropVariety}</strong></p>
                         )}
                         <p className="text-xs text-gray-400">
-                          Added: {new Date(crop.plantingDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          Added: {new Date(crop.plantingDate).toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { day: 'numeric', month: 'short', year: 'numeric' })}
                         </p>
                         {crop.cropVariety === 'AI Guide' && (
                           <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">

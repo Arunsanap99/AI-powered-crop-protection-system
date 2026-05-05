@@ -56,7 +56,6 @@ const QUICK_COMMODITIES = [
 ];
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
-const fmtShort = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 
 // ── Trend helpers ──────────────────────────────────────────────────────────
 const TREND = {
@@ -582,7 +581,9 @@ const Market = () => {
     const [searchInput, setSearchInput] = useState('');
     const [tickerItems, setTickerItems] = useState([]);
     const { isDark } = useTheme();
-    const { t } = useLanguage();
+    const { t, lang } = useLanguage();
+    const { user } = useAuth();
+    const fmtShort = (d) => new Date(d).toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { day: '2-digit', month: 'short' });
 
     useEffect(() => {
         Promise.all([loadCrops(), loadProfile(), loadTicker()]);
@@ -648,7 +649,7 @@ const Market = () => {
                                 <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, margin: '4px 0 0' }}>
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', display: 'inline-block', animation: 'pulse-dot 2s ease-in-out infinite' }} />
-                                        Live AI Intelligence · <MapPinIcon size={12} /> {district} · <span className="font-bold opacity-90">{new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                        Live AI Intelligence · <MapPinIcon size={12} /> {district} · <span className="font-bold opacity-90">{new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                                     </span>
                                 </p>
                             </div>
