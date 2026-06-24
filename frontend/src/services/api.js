@@ -241,13 +241,10 @@ export const mediaAPI = {
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (!data.results || data.results.length === 0) throw new Error();
+      // Pick a semi-random image from the top results to avoid redundancy
       const randomIndex = Math.floor(Math.random() * Math.min(data.results.length, 5));
       return data.results[randomIndex]?.urls?.regular || data.results[0]?.urls?.regular;
     } catch {
-      // High-quality agricultural fallback based on common crops
-      if (query.toLowerCase().includes('rice')) return 'https://images.unsplash.com/photo-1536633390817-389304604c5a?q=80&w=800';
-      if (query.toLowerCase().includes('wheat')) return 'https://images.unsplash.com/photo-1444858291040-58f756a3bdd6?q=80&w=800';
-      if (query.toLowerCase().includes('sugarcane')) return 'https://images.unsplash.com/photo-1594236162853-35639149f64c?q=80&w=800';
       return `https://images.unsplash.com/photo-1500382017468-9049fee74a62?q=80&w=800&auto=format&fit=crop`;
     }
   }
@@ -256,6 +253,14 @@ export const mediaAPI = {
 // Scheme APIs
 export const schemeAPI = {
   getRecommendations: (lang) => api.get('/schemes/recommendations', { params: { lang } }),
+};
+
+// Supply Chain & Processing Center APIs
+export const supplyChainAPI = {
+  getListings: (params) => api.get('/supply-chain/listings/nearby', { params }),
+  createListing: (data) => api.post('/supply-chain/listings', data),
+  getProcessingCenters: (params) => api.get('/supply-chain/external/processing-centers', { params }),
+  getStats: () => api.get('/supply-chain/collaboration/my-stats'),
 };
 
 export default api;

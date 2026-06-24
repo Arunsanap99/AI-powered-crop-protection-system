@@ -26,11 +26,11 @@ import {
   Zap,
   Sparkles
 } from 'lucide-react';
-import { agronomistAPI, weatherAPI, cropAPI, marketAPI } from '../../services/api';
+import { agronomistAPI, weatherAPI, cropAPI, marketAPI, supplyChainAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
-import LocationPromptModal from '../../components/LocationPromptModal';
+// import LocationPromptModal from '../../components/LocationPromptModal';
 
 // ── Fix Leaflet default icon issue with Vite ───────────────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
@@ -60,12 +60,21 @@ const createAgroIcon = (photoUrl) => L.divIcon({
   popupAnchor: [0, -22],
 });
 
-const marketIcon = L.divIcon({
-  html: `<div style="background:#b45309;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);color:white">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-  </div>`,
-  className: '', iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -18],
-});
+const createFacilityIcon = (type = '') => {
+  const isMill = type.toLowerCase().includes('mill');
+  const color = isMill ? '#059669' : '#b45309'; // Emerald for Mills, Amber for Markets
+  // Factory icon for mills, store icon for markets
+  const svg = isMill
+    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20V9l4-2v13"/><path d="M10 20V5l4-2v17"/><path d="M18 20V9l4-2v13"/><path d="M2 20h20"/></svg>`
+    : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
+
+  return L.divIcon({
+    html: `<div style="background:${color};width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.2);color:white">
+      ${svg}
+    </div>`,
+    className: 'facility-marker-icon', iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -20],
+  });
+};
 
 // ── AI Farming tips rotation ───────────────────────────────────────────────
 const FARMING_TIPS = [
@@ -157,12 +166,9 @@ const FarmerDashboard = () => {
   const farmerLng = user?.location?.coordinates?.[0];
   const mapCenter = farmerLat && farmerLng ? [farmerLat, farmerLng] : [20.5937, 78.9629];
 
-  // Dummy nearby markets (since no market geolocation API exists yet)
-  const nearbyMarkets = [
-    { name: 'Nashik APMC', lat: mapCenter[0] + 0.08, lng: mapCenter[1] + 0.06, distance: '12 km' },
-    { name: 'Pune Mandi', lat: mapCenter[0] - 0.12, lng: mapCenter[1] + 0.09, distance: '18 km' },
-    { name: 'Local Weekly Market', lat: mapCenter[0] + 0.04, lng: mapCenter[1] - 0.07, distance: '6 km' },
-  ];
+  // Nearby facilities (Ginning mills, APMCs, etc.) fetched from backend
+  const [nearbyMarkets, setNearbyMarkets] = useState([]);
+  const [loadingMarkets, setLoadingMarkets] = useState(false);
 
   // ── Tip rotation ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -182,7 +188,8 @@ const FarmerDashboard = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Location prompt ────────────────────────────────────────────────────
+  // ── Location prompt (Disabled) ──────────────────────────────────────────
+  /*
   useEffect(() => {
     const shouldShow = sessionStorage.getItem('showLocationPromptOnce');
     if (shouldShow === 'true') {
@@ -190,6 +197,7 @@ const FarmerDashboard = () => {
       setTimeout(() => setShowLocationPrompt(true), 600);
     }
   }, [user]);
+  */
 
   // ── Fetch agronomists ──────────────────────────────────────────────────
   useEffect(() => {
@@ -206,12 +214,7 @@ const FarmerDashboard = () => {
         setLoadingAgronomists(false);
       }
     };
-    if (user?.address?.district) {
-      fetchLocalAgronomists();
-    } else {
-      setLoadingAgronomists(false);
-      setAgronomistError('Please update your location to see local experts.');
-    }
+    fetchLocalAgronomists();
     // Fetch crops and their market prices
     const fetchCropsAndPrices = async () => {
       try {
@@ -229,7 +232,44 @@ const FarmerDashboard = () => {
       }
     };
     fetchCropsAndPrices();
-  }, []);
+
+    // Fetch nearby facilities (Mills & Markets)
+    const fetchFacilities = async () => {
+      try {
+        setLoadingMarkets(true);
+        const params = {
+          latitude: mapCenter[0],
+          longitude: mapCenter[1],
+          radius: 50 // 50km radius
+        };
+        // If user has a city, use it for better filtering
+        if (user?.city) params.city = user.city;
+
+        const res = await supplyChainAPI.getProcessingCenters(params);
+        if (res.data?.success) {
+          // Map and Filter to only include Mills
+          const centers = res.data.data
+            .filter(c => c.type?.toLowerCase().includes('mill'))
+            .map(c => ({
+              name: c.name,
+              lat: c.location[1],
+              lng: c.location[0],
+              type: c.type,
+              distance: c.distance || 'Nearby',
+              id: c.id
+            }));
+          setNearbyMarkets(centers);
+        }
+      } catch (err) {
+        console.error('Failed to load facilities:', err);
+      } finally {
+        setLoadingMarkets(false);
+      }
+    };
+    if (mapCenter[0] !== 20.5937) { // Only fetch if we have a real location (not default India center)
+      fetchFacilities();
+    }
+  }, [user?.city, mapCenter[0], mapCenter[1]]);
 
   // ── Helpers ────────────────────────────────────────────────────────────
   const getInitials = (name = '') =>
@@ -246,7 +286,7 @@ const FarmerDashboard = () => {
     { to: '/farmer/disease-reports', icon: ScanSearch, title: t('AI Disease Detection'), desc: t('Detect crop diseases with AI'), gradient: 'from-orange-500 to-red-500', bg: 'bg-orange-50', halo: '#f97316' },
     { to: '/farmer/weather', icon: CloudSun, title: t('Weather Forecast'), desc: t('7-day forecast for your farm'), gradient: 'from-blue-500 to-cyan-500', bg: 'bg-blue-50', halo: '#3b82f6' },
     { to: '/farmer/market', icon: LineChart, title: t('Market Prices'), desc: t('Live mandi prices near you'), gradient: 'from-violet-500 to-purple-600', bg: 'bg-violet-50', halo: '#8b5cf6' },
-    { to: '/profile', icon: UserIcon, title: t('My Profile'), desc: t('Update location & settings'), gradient: 'from-rose-500 to-pink-500', bg: 'bg-rose-50', halo: '#f43f5e' },
+    { to: '/profile', icon: UserIcon, title: t('My Profile'), desc: t('Update profile settings & details'), gradient: 'from-rose-500 to-pink-500', bg: 'bg-rose-50', halo: '#f43f5e' },
   ];
 
   const cardBase = 'bg-[var(--bg-card)] border-[var(--border-card)] hover:bg-[var(--bg-card-hover)]';
@@ -320,7 +360,7 @@ const FarmerDashboard = () => {
                   </span>
                   <span className="w-1 h-1 bg-emerald-400/40 rounded-full hidden sm:block" />
                   <span className="text-emerald-200/70 font-bold uppercase tracking-wider text-[10px]">
-                    {new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                    {new Date().toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </p>
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-2 leading-tight">
@@ -328,11 +368,7 @@ const FarmerDashboard = () => {
                 </h1>
 
                 <div className="flex flex-wrap items-center gap-3 mt-3">
-                  {user?.address?.district && (
-                    <span className="inline-flex items-center gap-2 bg-white/10 backdrop-blur text-emerald-200 px-3 py-1.5 rounded-xl text-sm font-medium border border-white/10">
-                      <MapPin size={16} /> {user.address.district}
-                    </span>
-                  )}
+                  {/* Location badge removed */}
                   {currentCrop && (
                     <span className="inline-flex items-center gap-2 bg-white/10 backdrop-blur text-emerald-200 px-3 py-1.5 rounded-xl text-sm font-medium border border-white/10">
                       <Sprout size={16} /> {currentCrop}
@@ -401,9 +437,6 @@ const FarmerDashboard = () => {
                       </div>
                       <div>
                         <h3 className={`font-extrabold text-sm ${textH}`}>{price.requestedCrop}</h3>
-                        <p className={`text-[10px] ${textS} flex items-center gap-1`}>
-                          <MapPin size={10} /> {price.district}
-                        </p>
                       </div>
                     </div>
                     <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'}`}>
@@ -427,160 +460,6 @@ const FarmerDashboard = () => {
                   <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-violet-500/5 rounded-full blur-2xl group-hover:bg-violet-500/10 transition-colors" />
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-
-        {/* ══ 2. INTERACTIVE MAP ══════════════════════════════════════════════ */}
-        <div className={`rounded-3xl overflow-hidden shadow-xl border bg-[var(--bg-card)] border-[var(--border-card)] fade-up`} style={{ animationDelay: '0.15s' }}>
-          {/* Map header */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-white/10">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center text-white shadow">
-                <MapIcon size={20} />
-              </div>
-              <div>
-                <h2 className={`font-extrabold text-base ${textH}`}>{t('Farm Location Map')}</h2>
-                <p className={`text-xs ${textS}`}>{t('Your farm, nearby agronomists & markets')}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Layer toggles */}
-              <button
-                onClick={() => setMapLayer(l => l === 'agronomists' ? 'none' : 'agronomists')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all border flex items-center gap-1.5 ${mapLayer === 'agronomists'
-                  ? 'bg-blue-600 text-white border-blue-600 shadow'
-                  : 'bg-[var(--bg-input)] text-[var(--text-secondary)] border-[var(--border-card)] hover:bg-[var(--bg-card-hover)]'}`}
-              >
-                <UserIcon size={14} /> {t('Show Agronomists')}
-              </button>
-              <button
-                onClick={() => setMapLayer(l => l === 'markets' ? 'none' : 'markets')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all border flex items-center gap-1.5 ${mapLayer === 'markets'
-                  ? 'bg-amber-600 text-white border-amber-600 shadow'
-                  : 'bg-[var(--bg-input)] text-[var(--text-secondary)] border-[var(--border-card)] hover:bg-[var(--bg-card-hover)]'}`}
-              >
-                <Store size={14} /> {t('Show Markets')}
-              </button>
-              <button
-                onClick={() => setShowMap(v => !v)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all bg-[var(--bg-input)] text-[var(--text-secondary)] border-[var(--border-card)] hover:bg-[var(--bg-card-hover)]`}
-              >
-                {showMap ? t('Collapse') : t('Expand')}
-              </button>
-            </div>
-          </div>
-
-          {showMap && (
-            <div className="kk-map relative" style={{ height: 380 }}>
-              <MapContainer
-                center={mapCenter}
-                zoom={farmerLat ? 11 : 5}
-                style={{ height: '100%', width: '100%' }}
-                scrollWheelZoom={false}
-                zoomControl={true}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a>'
-                  url={isDark
-                    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'}
-                />
-                {farmerLat && farmerLng && (
-                  <>
-                    <MapFlyTo center={[farmerLat, farmerLng]} />
-                    <Marker position={[farmerLat, farmerLng]} icon={farmerIcon}>
-                      <Popup>
-                        <div className="p-3 min-w-[160px]">
-                          <p className="font-extrabold text-gray-900 text-sm mb-1 flex items-center gap-1.5">
-                            <Sprout size={14} className="text-emerald-700" /> {t('Your Farm')}
-                          </p>
-                          <p className="text-xs text-gray-500 font-medium">{user?.address?.district || 'Your location'}</p>
-                          <div className="flex items-center gap-1.5 mt-2">
-                            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                            <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">{t('Active Monitor')}</p>
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  </>
-                )}
-
-                {/* Agronomist markers */}
-                {mapLayer === 'agronomists' && localAgronomists.map((ag, i) => {
-                  const agLat = ag.location?.coordinates?.[1];
-                  const agLng = ag.location?.coordinates?.[0];
-                  if (!agLat || !agLng) return null;
-                  const markerPhoto = ag.profilePhotoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(ag.fullName)}&background=2563eb&color=fff`;
-                  return (
-                    <Marker key={ag.id || i} position={[agLat, agLng]} icon={createAgroIcon(markerPhoto)}>
-                      <Popup>
-                        <div className="p-3 min-w-[180px]">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-100 shadow-sm">
-                              <img
-                                src={ag.profilePhotoUrl || `https://ui-avatars.com/api/?name=${ag.fullName}&background=2563eb&color=fff`}
-                                alt={ag.fullName}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                            <div>
-                              <p className="font-extrabold text-gray-900 text-sm leading-tight">
-                                {ag.fullName}
-                              </p>
-                              <p className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider">{t('Verified Expert')}</p>
-                            </div>
-                          </div>
-                          {ag.mobileNumber && (
-                            <div className="flex gap-2">
-                              <a href={`tel:${ag.mobileNumber}`} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 text-white text-[10px] font-bold py-1.5 rounded-lg">
-                                <Zap size={10} /> {t('Call')}
-                              </a>
-                              <a href={`https://wa.me/91${ag.mobileNumber}`} target="_blank" rel="noreferrer" className="flex-1 flex items-center justify-center gap-1 bg-[#25D366] text-white text-[10px] font-bold py-1.5 rounded-lg">
-                                {t('WhatsApp')}
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  );
-                })}
-
-                {/* Market markers */}
-                {mapLayer === 'markets' && nearbyMarkets.map((m, i) => (
-                  <Marker key={i} position={[m.lat, m.lng]} icon={marketIcon}>
-                    <Popup>
-                      <div className="p-3 min-w-[160px]">
-                        <p className="font-extrabold text-gray-900 text-sm mb-0.5 flex items-center gap-1.5">
-                          <Store size={14} className="text-amber-700" /> {m.name}
-                        </p>
-                        <p className="text-xs text-amber-600 font-semibold mb-2 flex items-center gap-1">
-                          <MapPin size={12} /> ~{m.distance}
-                        </p>
-                        <Link to="/farmer/market" className="block text-center bg-amber-600 text-white text-xs font-bold py-1.5 rounded-lg">{t('View Prices')}</Link>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-              </MapContainer>
-
-              {/* No location overlay */}
-              {!farmerLat && (
-                <div className="absolute inset-0 flex items-end justify-center pb-6 pointer-events-none z-[500]">
-                  <div className="bg-white/95 backdrop-blur rounded-2xl shadow-xl px-5 py-3 flex items-center gap-3 pointer-events-auto">
-                    <MapPin size={24} className="text-emerald-600" />
-                    <div>
-                      <p className="font-extrabold text-gray-900 text-sm">{t('Set your location')}</p>
-                      <p className="text-xs text-gray-500">{t('Enable precise farm mapping')}</p>
-                    </div>
-                    <Link to="/profile?tab=location" className="ml-2 bg-emerald-600 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-emerald-700 transition-colors">
-                      {t('Update')}
-                    </Link>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -787,8 +666,6 @@ const FarmerDashboard = () => {
           </div>
         </div>
       )}
-
-      {showLocationPrompt && <LocationPromptModal onClose={() => setShowLocationPrompt(false)} />}
     </div>
   );
 };

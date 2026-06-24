@@ -169,7 +169,15 @@ export const marketPrices = asyncHandler(async (req, res) => {
         ? realPrices.map(rp => `${rp.district}: ₹${rp.pricePerQuintal} (${rp.sourceName}, ${new Date(rp.publishDate).toLocaleDateString()})`).join(", ")
         : "No recent government data found for this specific region.";
 
-    const data = await getMarketPrices(commodity, district, state, user?.groqApiKey, realDataContext);
+    let data;
+    try {
+        data = await getMarketPrices(commodity, district, state, user?.groqApiKey, realDataContext);
+    } catch (err) {
+        console.error("AI Market Price Controller Error:", err.message);
+        // getMarketPrices already returns a fallback object, but if it totally crashes:
+        data = { commodity, summary: "Service busy. Showing database estimates.", isError: true };
+    }
+
     
     // Flag if the data is anchored to real results
     res.json({ 

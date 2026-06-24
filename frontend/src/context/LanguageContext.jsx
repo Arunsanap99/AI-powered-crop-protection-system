@@ -162,8 +162,8 @@ const STATIC_TRANSLATIONS = {
     'mr::Expert Profile': 'तज्ज्ञ प्रोफाइल',
     'mr::Expert Panel': 'तज्ज्ञ पॅनेल',
     'mr::Expert': 'तज्ज्ञ',
-    'mr::Admin': 'प्रशासक',
     'mr::Manage your farm, track crops, and get expert advice': 'तुमच्या शेताचे व्यवस्थापन करा, पिकांचा मागोवा घ्या आणि तज्ज्ञांचा सल्ला मिळवा',
+
 };
 
 // MyMemory free API — 500 chars/request limit

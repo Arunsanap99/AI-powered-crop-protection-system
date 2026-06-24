@@ -1,8 +1,8 @@
 export const FIXED_ADMIN = Object.freeze({
   id: 'admin-fixed-account',
   fullName: 'System Admin',
-  mobileNumber: '8446595203',
-  password: 'chaitanya027',
+  mobileNumber: '9322955167',
+  password: '123456',
   role: 'admin',
 });
 

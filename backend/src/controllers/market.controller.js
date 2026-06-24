@@ -96,8 +96,9 @@ export const getMyCropPrices = async (req, res) => {
         if (!cropNames.length) {
             return res.json({ success: true, prices: [], message: 'No crops in your list.' });
         }
-        const prices = await getLatestPricesForCrops(cropNames);
-        res.json({ success: true, cropNames, prices });
+        const district = req.user?.address?.district;
+        const prices = await getLatestPricesForCrops(cropNames, district);
+        res.json({ success: true, cropNames, prices, userDistrict: district });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }

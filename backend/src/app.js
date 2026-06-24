@@ -41,6 +41,14 @@ const allowedOrigins = [
   'https://krushikavach.netlify.app/'
 ];
 
+// Dynamically add CLIENT_URL from environment (set on Render dashboard)
+if (process.env.CLIENT_URL && !allowedOrigins.includes(process.env.CLIENT_URL)) {
+  allowedOrigins.push(process.env.CLIENT_URL);
+  // Also add version without trailing slash
+  const stripped = process.env.CLIENT_URL.replace(/\/$/, '');
+  if (!allowedOrigins.includes(stripped)) allowedOrigins.push(stripped);
+}
+
 // --- Core Middleware ---
 app.use(helmet());
 app.use(cors({

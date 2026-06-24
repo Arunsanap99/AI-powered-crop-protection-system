@@ -2,14 +2,14 @@ import User from '../models/user.model.js';
 
 // Admin details to be created in database
 const ADMIN_DETAILS = {
-  fullName: 'Chaitanya Raut',
-  mobileNumber: '8446595203',
-  password: 'chaitanya@123',
+  fullName: 'arun sanap',
+  mobileNumber: '9322955167',
+  password: '123456',
   role: 'admin',
   language: 'en',
   address: {
-    district: 'Satara',
-    taluka: 'Phaltan',
+    district: 'parbhani',
+    taluka: 'jintur',
   },
 };
 

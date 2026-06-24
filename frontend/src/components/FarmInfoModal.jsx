@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sprout, Ruler, Droplets, Leaf, ChevronRight, CheckCircle2, AlertCircle, TrendingUp, Camera, MapPin } from 'lucide-react';
+import { Sprout, Ruler, Droplets, Leaf, ChevronRight, CheckCircle2, AlertCircle, TrendingUp, Camera } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { userAPI } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
@@ -21,8 +21,7 @@ const FarmInfoModal = () => {
         experienceYears: '',
         farmingStage: 'starting',
         targetYield: '',
-        yieldImages: [],
-        address: user?.address || { district: '', taluka: '' }
+        yieldImages: []
     });
 
     const [aiAdvice, setAiAdvice] = useState(null);

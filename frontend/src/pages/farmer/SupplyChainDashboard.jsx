@@ -107,7 +107,7 @@ const SupplyChainDashboard = () => {
         city: ''
     });
     const [myLocation, setMyLocation] = useState(null);
-    const [mapCenter, setMapCenter] = useState([16.85, 74.58]); // Default to Sangli/Kolhapur region
+    const [mapCenter, setMapCenter] = useState([19.9975, 73.7898]); // Default to Nashik as requested by user
     const [showListingModal, setShowListingModal] = useState(false);
     const [newListing, setNewListing] = useState({
         cropType: '',
@@ -240,6 +240,16 @@ const SupplyChainDashboard = () => {
             setGeneratingAI(false);
         }
     };
+
+    useEffect(() => {
+        if (!myLocation && user?.address?.district) {
+            const district = user.address.district.toLowerCase();
+            if (district.includes('nashik')) setMapCenter([19.9975, 73.7898]);
+            else if (district.includes('kolhapur')) setMapCenter([16.7050, 74.2433]);
+            else if (district.includes('pune')) setMapCenter([18.5204, 73.8567]);
+            else if (district.includes('sangli')) setMapCenter([16.8524, 74.5815]);
+        }
+    }, [user, myLocation]);
 
     // Fetch Current Location
     useEffect(() => {

@@ -17,8 +17,10 @@ def get_osm_facilities(lat, lon, radius_km=50, city=None):
       node["man_made"="silo"](around:{radius_meters},{lat},{lon});
       node["industrial"~"factory|manufacturing"]["product"~"cotton|grain|flour|sugar|oil|seed|crop"](around:{radius_meters},{lat},{lon});
       way["industrial"~"factory|manufacturing"]["product"~"cotton|grain|flour|sugar|oil|seed|crop"](around:{radius_meters},{lat},{lon});
-      node["landuse"="industrial"]["name"~"Ginning|Mill|Warehouse|Cold Storage|Agri|Cotton|Spinning"](around:{radius_meters},{lat},{lon});
-      way["landuse"="industrial"]["name"~"Ginning|Mill|Warehouse|Cold Storage|Agri|Cotton|Spinning"](around:{radius_meters},{lat},{lon});
+      node["landuse"="industrial"]["name"~"Ginning|Mill|Warehouse|Cold Storage|Agri|Cotton|Spinning|Mandi|APMC|Market"](around:{radius_meters},{lat},{lon});
+      way["landuse"="industrial"]["name"~"Ginning|Mill|Warehouse|Cold Storage|Agri|Cotton|Spinning|Mandi|APMC|Market"](around:{radius_meters},{lat},{lon});
+      node["amenity"="market"](around:{radius_meters},{lat},{lon});
+      way["amenity"="market"](around:{radius_meters},{lat},{lon});
       node["shop"="agriculture"](around:{radius_meters},{lat},{lon});
     );
     out body;
@@ -31,7 +33,8 @@ def get_osm_facilities(lat, lon, radius_km=50, city=None):
         "Ginning Mill": "https://images.unsplash.com/photo-1590633717560-49651582e3b2?q=80&w=400&h=300&auto=format&fit=crop",
         "Warehouse": "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=400&h=300&auto=format&fit=crop",
         "Processing Center": "https://images.unsplash.com/photo-1541888946425-d81bb19480c5?q=80&w=400&h=300&auto=format&fit=crop",
-        "Cold Storage": "https://images.unsplash.com/photo-1580674684081-7617fbf3d745?q=80&w=400&h=300&auto=format&fit=crop"
+        "Cold Storage": "https://images.unsplash.com/photo-1580674684081-7617fbf3d745?q=80&w=400&h=300&auto=format&fit=crop",
+        "Agri Market": "https://images.unsplash.com/photo-1533900298318-6b8da08a523e?q=80&w=400&h=300&auto=format&fit=crop"
     }
 
     url = "https://overpass-api.de/api/interpreter"
@@ -48,6 +51,7 @@ def get_osm_facilities(lat, lon, radius_km=50, city=None):
                 if "ginning" in name.lower() or "spinning" in name.lower(): facility_type = "Ginning Mill"
                 elif "warehouse" in name.lower() or "storage" in name.lower(): facility_type = "Warehouse"
                 elif "cold storage" in name.lower(): facility_type = "Cold Storage"
+                elif "apmc" in name.lower() or "mandi" in name.lower() or "market" in name.lower(): facility_type = "Agri Market"
                 
                 lat_val = element.get('lat')
                 lon_val = element.get('lon')

@@ -12,7 +12,7 @@ export const fetchNearbyFacilities = async (lat, lng, radius = 25000) => {
         return [];
     }
 
-    const keywords = ['ginning mill', 'apmc market', 'warehouse', 'cold storage'];
+    const keywords = ['ginning mill', 'apmc market', 'mandi', 'krishi utpanna bazaar samiti', 'warehouse', 'cold storage', 'grain market'];
     let allResults = [];
 
     for (const keyword of keywords) {
@@ -61,9 +61,10 @@ export const fetchNearbyFacilities = async (lat, lng, radius = 25000) => {
 };
 
 const mapPlaceTypeToFacilityType = (keyword, placeTypes) => {
-    if (keyword.includes('ginning')) return 'Ginning Mill';
-    if (keyword.includes('apmc')) return 'Agri Market';
-    if (keyword.includes('warehouse')) return 'Warehouse';
-    if (keyword.includes('cold storage')) return 'Processing Center';
+    const k = keyword.toLowerCase();
+    if (k.includes('ginning')) return 'Ginning Mill';
+    if (k.includes('apmc') || k.includes('mandi') || k.includes('market') || k.includes('samiti')) return 'Agri Market';
+    if (k.includes('warehouse')) return 'Warehouse';
+    if (k.includes('cold storage')) return 'Processing Center';
     return 'Processing Center';
 };

@@ -77,14 +77,14 @@ const getWeatherDescription = (code) => {
   return m[code] || { text: 'Unknown', icon: Thermometer, color: '#94a3b8' };
 };
 
-const formatDate = (dateString, lang) => {
+const formatDate = (dateString) => {
   const date = new Date(dateString);
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  if (date.toDateString() === today.toDateString()) return lang === 'hi' ? 'आज' : (lang === 'mr' ? 'आज' : 'Today');
-  if (date.toDateString() === tomorrow.toDateString()) return lang === 'hi' ? 'कल' : (lang === 'mr' ? 'उद्या' : 'Tomorrow');
-  return date.toLocaleDateString(lang === 'hi' ? 'hi-IN' : (lang === 'mr' ? 'mr-IN' : 'en-IN'), { weekday: 'short', day: 'numeric', month: 'short' });
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+  return date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
 // ─── Status colour config ─────────────────────────────────────────────────────
@@ -507,7 +507,7 @@ const Weather = () => {
                     const mr = day.precipitationProbability >= 40;
                     return (
                       <div key={i} className="glass-sm fc-card" style={{ padding: '14px 10px', textAlign: 'center' }}>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', margin: '0 0 7px', textTransform: 'uppercase', letterSpacing: .5 }}>{formatDate(day.date, lang)}</p>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', margin: '0 0 7px', textTransform: 'uppercase', letterSpacing: .5 }}>{formatDate(day.date)}</p>
                         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
                           <di.icon size={28} style={{ color: di.color }} />
                         </div>

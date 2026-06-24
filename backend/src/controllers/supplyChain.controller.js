@@ -4,7 +4,7 @@ import CollaborationChat from '../models/collaborationChat.model.js';
 import ProcessingCenter from '../models/processingCenter.model.js';
 import axios from 'axios';
 import { fetchNearbyFacilities } from '../services/places.service.js';
-const ML_SERVER_URL = process.env.ML_SERVER_URL || "http://localhost:8000";
+const ML_SERVER_URL = process.env.ML_SERVICE_URL || process.env.ML_SERVER_URL || "http://localhost:8000";
 
 // Ensure axios is available globally in this module if default import fails
 const _axios = axios;
@@ -269,7 +269,7 @@ export const getExternalProcessingCenters = async (req, res) => {
 
         // 2. If DB results are low, fetch fresh data from Google Places (Primary for real facilities)
         if (localCenters.length < 10 && latitude && longitude) {
-            console.log('[*] Low local results. Fetching fresh facilities from Google Places...');
+            console.log('[SupplyChain] Low local results. Fetching fresh facilities from Google Places...');
             await fetchNearbyFacilities(latitude, longitude, radius * 1000);
 
             // Re-query local DB to include new Google results
@@ -285,40 +285,45 @@ export const getExternalProcessingCenters = async (req, res) => {
 
         // 3. Optional: Call our Python Hybrid Service (Scraper + OSM) for additional coverage
         const pythonServiceUrl = `${ML_SERVER_URL}/search-facilities?lat=${latitude}&lon=${longitude}&radius=${radius}${city ? `&city=${city}` : ''}`;
-        console.log(`[*] Checking hybrid facilities from: ${pythonServiceUrl}`);
-
-        console.log(`[*] Fetching hybrid facilities from: ${pythonServiceUrl}`);
-
-        let externalResults = [];
+        
+        let pythonCenters = [];
         try {
-            const response = await _axios.get(pythonServiceUrl);
-            if (response.data && response.data.success) {
-                externalResults = response.data.data;
+            console.log(`[SupplyChain] Calling Python service: ${pythonServiceUrl}`);
+            const pyRes = await _axios.get(pythonServiceUrl);
+            
+            // The Python service returns { success: true, data: [...] }
+            if (pyRes.data && pyRes.data.success && Array.isArray(pyRes.data.data)) {
+                pythonCenters = pyRes.data.data;
+                console.log(`[SupplyChain] Python service returned ${pythonCenters.length} centers`);
+            } else if (Array.isArray(pyRes.data)) {
+                pythonCenters = pyRes.data;
+            }
 
-                // 3. Persist external results to DB for future use
-                for (const center of externalResults) {
-                    if (!center.id) continue; // Skip if no valid external ID to prevent unique index violation
+            // Persist external results to DB for future use
+            for (const center of pythonCenters) {
+                if (!center.id) continue;
 
-                    await ProcessingCenter.findOneAndUpdate(
-                        { externalId: center.id },
-                        {
-                            name: center.name,
-                            type: center.type,
-                            city: center.city,
-                            contact: center.contact,
-                            image: center.image,
-                            source: center.source,
-                            location: {
-                                type: "Point",
-                                coordinates: center.location
-                            },
-                            lastUpdated: new Date()
+                await ProcessingCenter.findOneAndUpdate(
+                    { externalId: center.id },
+                    {
+                        name: center.name,
+                        type: center.type,
+                        city: center.city,
+                        contact: center.contact,
+                        image: center.image,
+                        source: center.source,
+                        location: {
+                            type: "Point",
+                            coordinates: center.location // [lng, lat]
                         },
-                        { upsert: true, new: true }
-                    );
-                }
+                        lastUpdated: new Date()
+                    },
+                    { upsert: true, new: true }
+                );
+            }
 
-                // Refresh local search to include newly added ones
+            // Refresh local search if we found new ones from Python
+            if (pythonCenters.length > 0) {
                 localCenters = await ProcessingCenter.find({
                     location: {
                         $near: {
@@ -329,10 +334,7 @@ export const getExternalProcessingCenters = async (req, res) => {
                 }).limit(50);
             }
         } catch (err) {
-            console.error("[-] Python Service Error:", err.message);
-            if (localCenters.length === 0) {
-                localCenters = [];
-            }
+            console.error('[SupplyChain] Python service error:', err.message);
         }
 
         res.status(200).json({
@@ -343,7 +345,7 @@ export const getExternalProcessingCenters = async (req, res) => {
                 _id: c._id,
                 name: c.name,
                 type: c.type,
-                location: c.location.coordinates,
+                location: c.location.coordinates, // Array [lng, lat]
                 city: c.city,
                 contact: c.contact,
                 image: c.image,

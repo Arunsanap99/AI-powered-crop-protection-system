@@ -3,6 +3,8 @@
  * GROK_API_KEY in .env must be your Groq API key (gsk_...).
  */
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 
 const LANGUAGE_NAMES = {
   en: "English",
@@ -53,6 +55,13 @@ const createClient = (userApiKey = null) => {
   if (!apiKey) throw new Error("No Groq API key found. Please configure it in your profile.");
   return new OpenAI({ apiKey, baseURL: "https://api.groq.com/openai/v1" });
 };
+
+const createGeminiClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  return new GoogleGenerativeAI(apiKey);
+};
+
 
 const stripFences = (text) =>
   text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -110,35 +119,56 @@ const normalizeAndParseJSON = (raw) => {
 };
 
 /**
- * Helper to call Groq AI with a fallback model if the primary model fails (e.g. Rate Limit 429).
+ * Helper to call AI with multiple fallbacks:
+ * 1. Try Google Gemini (Most reliable/free)
+ * 2. Try Groq Primary (Llama 3.3 70B)
+ * 3. Try Groq Secondary (Llama 3.1 8B)
  */
-const callAIWithFallback = async (client, messages, temperature = 0.3, max_tokens = 2000) => {
-  const PRIMARY_MODEL = "llama-3.3-70b-versatile";
-  const FALLBACK_MODEL = "llama-3.1-8b-instant";
+const callAIWithFallback = async (groqClient, messages, temperature = 0.3, max_tokens = 2000) => {
+  const PRIMARY_GROQ = "llama-3.3-70b-versatile";
+  const FALLBACK_GROQ = "llama-3.1-8b-instant";
 
+  // --- 1. Try Gemini First (Highly reliable) ---
+  const gemini = createGeminiClient();
+  if (gemini) {
+    try {
+      const model = gemini.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+      const prompt = messages.map(m => `${m.role}: ${m.content}`).join("\n");
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    } catch (geminiErr) {
+      console.warn("[AI Fallback] Gemini failed:", geminiErr.message);
+    }
+  }
+
+  // --- 2. Try Groq Primary ---
   try {
-    const response = await client.chat.completions.create({
-      model: PRIMARY_MODEL,
+    const response = await groqClient.chat.completions.create({
+      model: PRIMARY_GROQ,
       messages,
       temperature,
       max_tokens,
     });
     return response.choices[0].message.content;
   } catch (err) {
-    // Check if it's a rate limit error (429) or other API error
-    if (err.status === 429 || err.message?.includes("rate limit") || err.message?.includes("TPD")) {
-      console.warn(`[AI Fallback] Primary model (${PRIMARY_MODEL}) rate limited. Falling back to ${FALLBACK_MODEL}...`);
-      const response = await client.chat.completions.create({
-        model: FALLBACK_MODEL,
+    // If it's a billing error or rate limit, try the secondary Groq model
+    console.warn(`[AI Fallback] Groq Primary (${PRIMARY_GROQ}) failed:`, err.message);
+
+    try {
+      const response = await groqClient.chat.completions.create({
+        model: FALLBACK_GROQ,
         messages,
         temperature,
         max_tokens,
       });
       return response.choices[0].message.content;
+    } catch (fallbackErr) {
+      console.error("[AI Fallback] All AI models failed including fallbacks:", fallbackErr.message);
+      throw fallbackErr;
     }
-    throw err;
   }
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  KRISHI KAVACH PROJECT KNOWLEDGE BASE
@@ -437,18 +467,25 @@ export const getWeatherCropImpact = async (cropName, currentWeather, dailyForeca
   const weatherSummary = `Current: ${currentWeather.temperature}°C, ${currentWeather.humidity}%, ${currentWeather.precipitation}mm.`;
   const forecastSummary = dailyForecast.slice(0, 7).map(d => `${d.date}: ${d.maxTemp}/${d.minTemp}°C`).join("|");
 
-  const prompt = `Agri-Met expert. Analyze ${cropName} impact for weather: ${weatherSummary}. Forecast: ${forecastSummary}. 
+  const prompt = `Agri-Met expert. Analyze ${cropName} impact for weather: ${weatherSummary}. 
+7-Day Forecast Data: ${forecastSummary}. 
+
+Provide a detailed analysis. For the "weeklyAdvisory", you MUST provide exactly 7 items, one for each day of the forecast period.
+
 Return JSON ONLY in ${langName}:
 {
   "overallStatus": "Good/Caution/Critical",
   "overallMessage": "Summary in ${langName}",
   "overallScore": 80,
-  "impacts": [{ "factor": "Temp", "status": "good", "impact": "desc", "recommendation": "act" }],
-  "weeklyAdvisory": [{ "day": "Today", "alert": "msg", "alertLevel": "info" }],
-  "keyRisks": ["risk 1"],
-  "immediateActions": ["act 1"],
-  "bestTimeForActivities": { "spraying": "time", "irrigation": "time", "harvesting": "time" }
-}`;
+  "impacts": [{ "factor": "Temp/Rain/Wind", "status": "good/caution/critical", "impact": "desc in ${langName}", "recommendation": "act in ${langName}" }],
+  "weeklyAdvisory": [
+    { "day": "Day Name (e.g. Monday or Today)", "advice": "Specific crop advice for this weather in ${langName}", "alertLevel": "info/warning/danger" }
+  ],
+  "keyRisks": ["risk 1 in ${langName}", "risk 2"],
+  "immediateActions": ["act 1 in ${langName}", "act 2"],
+  "bestTimeForActivities": { "spraying": "time/advice", "irrigation": "time/advice", "harvesting": "time/advice" }
+}
+All text must be in ${langName}. Ensure 7 items in weeklyAdvisory.`;
 
   const content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.3, 2000);
   const result = normalizeAndParseJSON(content);
@@ -503,8 +540,26 @@ Return JSON ONLY:
 }
 CRITICAL: Use only ASCII digits (0-9) in all JSON numeric values. Never use commas inside numbers. Never use regional numeral scripts.`;
 
-  const content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.4, 3000);
+  let content;
+  try {
+    content = await callAIWithFallback(client, [{ role: "user", content: prompt }], 0.4, 3000);
+  } catch (aiErr) {
+    console.error("[Market AI] Critical Failure:", aiErr.message);
+    // Return a safe mocked structure so the UI doesn't crash 500
+    return {
+      commodity,
+      unit: "quintal",
+      summary: "Real-time AI analysis is currently unavailable. Showing historical data or estimates.",
+      trend: "stable",
+      trendPercent: 0,
+      localMarkets: [{ marketName: "Loading...", district, modalPrice: 0 }],
+      priceHistory: [],
+      isError: true
+    };
+  }
+
   const data = normalizeAndParseJSON(content);
+
 
   if (Array.isArray(data.priceHistory)) {
     const basePrice = data.localMarkets?.[0]?.modalPrice || 0;

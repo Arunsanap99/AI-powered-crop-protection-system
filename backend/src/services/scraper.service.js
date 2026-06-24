@@ -60,19 +60,27 @@ export const scrapeMarketPrices = async (crops = ['Soybean', 'Cotton', 'Wheat', 
 
         // Fallback for demo: If scraping fails/zero results, generate from AI/Mock
         if (results.length === 0) {
-            console.log('[Scraper] No direct table results, generating realistic demo data for Kolhapur region...');
-            const fallbackResults = crops.map(c => ({
-                commodity: c,
-                state: 'Maharashtra',
-                district: 'Kolhapur',
-                pricePerQuintal: getMockPrice(c),
-                originalPrice: getMockPrice(c),
-                sourceName: 'Agmarknet Real-Time (Fallback)',
-                publishDate: new Date(),
-                marketType: 'government',
-                confidenceScore: 0.8
-            }));
-            results.push(...fallbackResults);
+            console.log('[Scraper] No direct table results, generating realistic demo data for regional hubs...');
+            const regions = [
+                { district: 'Nashik', state: 'Maharashtra' },
+                { district: 'Kolhapur', state: 'Maharashtra' },
+                { district: 'Pune', state: 'Maharashtra' }
+            ];
+
+            for (const region of regions) {
+                const regionalResults = crops.map(c => ({
+                    commodity: c,
+                    state: region.state,
+                    district: region.district,
+                    pricePerQuintal: getMockPrice(c),
+                    originalPrice: getMockPrice(c),
+                    sourceName: 'Agmarknet Real-Time (Fallback)',
+                    publishDate: new Date(),
+                    marketType: 'government',
+                    confidenceScore: 0.8
+                }));
+                results.push(...regionalResults);
+            }
         }
 
         // Store to Database
@@ -102,7 +110,7 @@ export const scrapeMarketPrices = async (crops = ['Soybean', 'Cotton', 'Wheat', 
     }
 };
 
-const getMockPrice = (crop) => {
+export const getMockPrice = (crop) => {
     const prices = {
         'Soybean': 4800 + Math.random() * 200,
         'Cotton': 7200 + Math.random() * 400,

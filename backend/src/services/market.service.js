@@ -2,7 +2,7 @@ import MarketPrice from '../models/marketPrice.model.js';
 import ProcessingCenter from '../models/processingCenter.model.js';
 import { getMarketPrices } from './gemini.service.js';
 import { fetchNearbyFacilities } from './places.service.js';
-import { scrapeMarketPrices } from './scraper.service.js';
+import { scrapeMarketPrices, getMockPrice } from './scraper.service.js';
 // ── Daily scrape cycle for facility market prices ──────────────────────────────
 export const runScrapeCycle = async () => {
     console.log('[Market] Starting facility price and location scrape cycle...');
@@ -10,11 +10,15 @@ export const runScrapeCycle = async () => {
     const errors = [];
 
     try {
-        // 1. Fetch real-time agricultural facilities from Google Places (Kolhapur Region as base) 
-        // Note: Coordinates for Kolhapur=16.7050, 74.2433
+        // 1. Fetch real-time agricultural facilities from Google Places 
         console.log('[Market] Fetching real facilities from Google Places...');
-        const realFacilities = await fetchNearbyFacilities(16.7050, 74.2433, 40000); // 40km radius
-        console.log(`[Market] Discovered/Updated ${realFacilities?.length || 0} real facilities.`);
+        // Kolhapur Region
+        const kolhapurFacilities = await fetchNearbyFacilities(16.7050, 74.2433, 40000); // 40km radius
+        // Nashik Region (Added per user request)
+        const nashikFacilities = await fetchNearbyFacilities(19.9975, 73.7898, 40000); // 40km radius
+        
+        const realFacilities = [...(kolhapurFacilities || []), ...(nashikFacilities || [])];
+        console.log(`[Market] Discovered/Updated ${realFacilities.length} real facilities across Kolhapur and Nashik.`);
 
         // 2. Run real Agmarknet scraper for global market prices
         console.log('[Market] Running real-time Agmarknet and mandi scraper...');
@@ -29,16 +33,22 @@ export const runScrapeCycle = async () => {
             try {
                 // Get prices relevant to that facility's specific city context
                 const crops = ['Soybean', 'Cotton', 'Wheat', 'Onion'];
-                const priceData = await getMarketPrices(crops, null, facility.city || 'Nashik');
+                const mappedPrices = [];
 
-                if (priceData && priceData.localMarkets && priceData.localMarkets.length > 0) {
-                    const mappedPrices = priceData.localMarkets.map(p => ({
-                        crop: p.commodity || 'Soybean',
-                        price: p.modalPrice || p.price || 4000,
-                        unit: 'quintal',
-                        date: new Date()
-                    }));
+                for (const crop of crops) {
+                    const priceData = await getMarketPrices(crop, facility.district || facility.city || 'Nashik', facility.state || 'Maharashtra');
+                    if (priceData && priceData.localMarkets && priceData.localMarkets.length > 0) {
+                        const topMarket = priceData.localMarkets[0];
+                        mappedPrices.push({
+                            crop: crop,
+                            price: topMarket.modalPrice || topMarket.price || getMockPrice(crop),
+                            unit: 'quintal',
+                            date: new Date()
+                        });
+                    }
+                }
 
+                if (mappedPrices.length > 0) {
                     facility.marketPrices = mappedPrices;
                     facility.lastUpdated = new Date();
                     await facility.save();
@@ -142,11 +152,27 @@ export const getMarketStats = async () => {
     return { totalRecords: total, lastUpdated: latest?.publishDate || null, sourceCount: sources.length, sources };
 };
 
-export const getLatestPricesForCrops = async (cropNames) => {
+export const getLatestPricesForCrops = async (cropNames, district) => {
     if (!cropNames?.length) return [];
     const results = await Promise.all(
         cropNames.map(async (cropName) => {
-            const record = await MarketPrice.findOne({ commodity: { $regex: new RegExp(cropName, 'i') } }).sort({ publishDate: -1 }).lean();
+            let record = null;
+            
+            // 1. Try to find the latest record for this crop in the user's district
+            if (district) {
+                record = await MarketPrice.findOne({ 
+                    commodity: { $regex: new RegExp(cropName, 'i') },
+                    district: { $regex: new RegExp(district, 'i') }
+                }).sort({ publishDate: -1 }).lean();
+            }
+
+            // 2. If no district-specific record, find the absolute latest record for this crop
+            if (!record) {
+                record = await MarketPrice.findOne({ 
+                    commodity: { $regex: new RegExp(cropName, 'i') } 
+                }).sort({ publishDate: -1 }).lean();
+            }
+
             return record ? { ...record, requestedCrop: cropName } : null;
         })
     );

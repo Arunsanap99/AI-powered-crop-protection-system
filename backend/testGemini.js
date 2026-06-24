@@ -6,8 +6,8 @@ import User from './src/models/user.model.js'; // Adjust path if necessary
 dotenv.config();
 
 // --- CONFIGURE THESE VALUES ---
-const ADMIN_MOBILE_NUMBER = '9123456782'; // The mobile number of the admin account
-const NEW_PASSWORD = 'chaitanya@123'; // Your new temporary password
+const ADMIN_MOBILE_NUMBER = '932299567'; // The mobile number of the admin account
+const NEW_PASSWORD = '123456'; // Your new temporary password
 // ------------------------------
 
 const resetPassword = async () => {
